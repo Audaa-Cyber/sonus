@@ -1,111 +1,157 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, AudioLines } from "lucide-react";
-import ParticleOrb from "@/components/particle-orb";
-import BirdFlock from "@/components/bird-flock";
-import DuneLandscape from "@/components/dune-landscape";
-import ContinuousThread from "@/components/continuous-thread";
-import Feather from "@/components/feather";
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  Fingerprint,
+  LockKeyhole,
+  MessageSquareText,
+  Users,
+  Wallet,
+  Waypoints,
+} from "lucide-react";
+import DarkGradientBg from "@/components/ui/elegant-dark-pattern";
 
-const principles = [
-  { number: "01", title: "Intent", copy: "Say what you mean." },
-  { number: "02", title: "Context", copy: "Know what happens next." },
-  { number: "03", title: "Control", copy: "Stay in charge of every move." },
+const steps = [
+  { number: "01", title: "Describe it", detail: "Say what you need in plain language." },
+  { number: "02", title: "Review it", detail: "Check the recipient, amount, and rules." },
+  { number: "03", title: "Authorize it", detail: "Confirm securely through your wallet." },
+];
+
+const capabilities = [
+  { icon: MessageSquareText, title: "Intent intelligence", detail: "Turn a request into a clear payment plan." },
+  { icon: Fingerprint, title: "Recipient context", detail: "Resolve who you mean, not just an address." },
+  { icon: Waypoints, title: "Payment memory", detail: "Keep useful context visible and editable." },
 ];
 
 export default function Home() {
   return (
     <main className="site-shell" id="top">
-      <ContinuousThread />
-
       <header className="site-header">
         <a className="brand-lockup" href="#top" aria-label="Sonus home">
           <span className="sonus-symbol" aria-hidden="true"><i /><i /><i /></span>
           <span className="brand-name">SONUS</span>
         </a>
         <nav className="main-nav" aria-label="Main navigation">
-          <a href="#approach">Approach</a>
-          <a href="#experience">Experience</a>
+          <a href="#product">Product</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#security">Security</a>
+          <a href="#developers">Developers</a>
         </nav>
-        <a className="header-link" href="#experience">Enter Sonus <ArrowUpRight size={14} strokeWidth={1.6} /></a>
+        <a className="header-link" href="#demo">Get started <ArrowUpRight size={14} /></a>
+        <details className="mobile-nav">
+          <summary aria-label="Open navigation menu">Menu <span>＋</span></summary>
+          <nav aria-label="Mobile navigation">
+            <a href="#product">Product</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#security">Security</a>
+            <a href="#groups">Groups</a>
+            <a href="#developers">Developers</a>
+            <a href="#roadmap">Roadmap</a>
+          </nav>
+        </details>
       </header>
 
       <section className="hero-section" aria-labelledby="hero-title">
-        <div className="hero-atmosphere" aria-hidden="true" />
-        <BirdFlock />
-        <div className="hero-copy">
-          <p className="eyebrow"><span className="eyebrow-dot" /> PAYMENT INTELLIGENCE, REIMAGINED</p>
-          <h1 id="hero-title">Money,<br /><em>understood.</em></h1>
-          <p className="hero-description">Speak naturally. See what happens.<br className="desktop-break" /> Stay in control.</p>
-          <a className="primary-link" href="#experience">Meet Sonus <ArrowRight size={16} strokeWidth={1.7} /></a>
-          <div className="hero-footnote"><span className="footnote-line" /> A clearer signal for moving money</div>
-        </div>
-        <div className="orb-composition">
-          <div className="orb-caption orb-caption-top"><span>01 / INTENT</span><span>LIVE SYSTEM</span></div>
-          <ParticleOrb />
-          <div className="orb-caption orb-caption-bottom"><AudioLines size={15} strokeWidth={1.5} /><span>Listen for what matters.</span></div>
-        </div>
-        <DuneLandscape />
-        <div className="hero-index"><span>SONUS / 001</span><span>MADE FOR HUMAN INTENT</span></div>
-      </section>
-
-      <section className="brand-reveal" aria-label="Sonus brand statement">
-        <div className="brand-reveal-inner">
-          <Feather />
-          <p className="brand-overline">A DIFFERENT KIND OF FINANCIAL INTERFACE</p>
-          <h2 className="sonus-wordmark">SONUS<span className="wordmark-period">.</span></h2>
-          <p className="brand-statement">Sound becomes signal.<br />Signal becomes action.</p>
-        </div>
-        <span className="section-index">S / 02</span>
-      </section>
-
-      <section className="approach-section" id="approach" aria-labelledby="approach-title">
-        <div className="approach-heading">
-          <p className="eyebrow">THE PRINCIPLE</p>
-          <h2 id="approach-title">Less friction.<br /><em>More understanding.</em></h2>
-        </div>
-        <div className="principle-list">
-          {principles.map((item) => (
-            <div className="principle-row" key={item.number}>
-              <span className="principle-number">{item.number}</span>
-              <h3>{item.title}</h3>
-              <p>{item.copy}</p>
-              <ArrowDownRight className="principle-arrow" size={17} strokeWidth={1.4} />
-            </div>
-          ))}
-        </div>
-        <p className="approach-aside">A payment should feel as clear as the intention behind it.</p>
-      </section>
-
-      <section className="experience-section" id="experience" aria-labelledby="experience-title">
-        <div className="experience-copy">
-          <p className="eyebrow">BEFORE MONEY MOVES</p>
-          <h2 id="experience-title">Your intent.<br /><em>Made tangible.</em></h2>
-          <p>Sonus brings the important details into focus, before a payment is authorized.</p>
-          <a className="text-link" href="#top">Back to the signal <ArrowUpRight size={15} strokeWidth={1.5} /></a>
-        </div>
-        <div className="payment-preview" aria-label="Illustrative payment preview">
-          <div className="preview-topline"><span className="preview-status"><i /> PREVIEW</span><span>PAYMENT PLAN / 001</span></div>
-          <div className="preview-request">
-            <span className="preview-label">YOU SAID</span>
-            <p>“Send $100 to Alex.”</p>
+        <DarkGradientBg className="hero-background" />
+        <div className="hero-content">
+          <p className="eyebrow"><span className="eyebrow-dot" /> SONUS · PAYMENT INTELLIGENCE</p>
+          <h1 id="hero-title">Money should<br />understand <em>you.</em></h1>
+          <p className="hero-description">Send crypto with a simple conversation. Sonus understands who you’re paying, why you’re paying, and what needs to happen before money moves.</p>
+          <div className="hero-actions">
+            <a className="primary-link" href="#demo">Try Sonus <ArrowRight size={16} /></a>
+            <a className="secondary-link" href="#product">Explore the platform <ArrowDownRight size={15} /></a>
           </div>
-          <div className="preview-divider"><span /><span /><span /></div>
-          <div className="preview-recipient">
-            <div className="recipient-monogram">A</div>
-            <div><span className="preview-label">RECIPIENT</span><strong>Alex Morgan</strong><small>Recognized contact</small></div>
-            <span className="verified-mark">✓</span>
-          </div>
-          <div className="preview-amount"><span className="preview-label">PAYMENT AMOUNT</span><strong>$100<span>.00</span></strong><small>USDC · illustrative preview</small></div>
-          <div className="preview-bottom"><span><i /> Details ready to review</span><span>NOT SENT</span></div>
+          <p className="trust-note"><span /> Built for clarity. Designed for control.</p>
+        </div>
+        <div className="hero-index"><span>SONUS / 001</span><span>INTENT → UNDERSTANDING → ACTION</span></div>
+      </section>
+
+      <section className="product-section section-wrap" id="product" aria-labelledby="product-title">
+        <div className="section-copy">
+          <p className="eyebrow">THE IDEA</p>
+          <h2 id="product-title">Less wallet work.<br /><em>More human sense.</em></h2>
+          <p>Sonus is being designed to turn natural language into payment actions you can understand and control.</p>
+        </div>
+        <div className="signal-visual" aria-hidden="true">
+          <div className="signal-ring signal-ring-one" />
+          <div className="signal-ring signal-ring-two" />
+          <div className="signal-core"><span /><span /><span /><span /><span /></div>
+          <span className="signal-caption">INTENT SIGNAL / 01</span>
         </div>
       </section>
+
+      <section className="demo-section section-wrap" id="demo" aria-labelledby="demo-title">
+        <div className="section-copy">
+          <p className="eyebrow">A PAYMENT, MADE CLEAR</p>
+          <h2 id="demo-title">From words<br />to <em>what matters.</em></h2>
+          <p>A concept preview of how a request could become a structured payment plan.</p>
+        </div>
+        <div className="payment-preview">
+          <div className="preview-topline"><span>SONUS / PAYMENT PLAN</span><span className="demo-pill">DEMO ONLY</span></div>
+          <div className="preview-request"><span className="preview-label">YOUR REQUEST</span><p>“Send $100 to Alex for dinner.”</p></div>
+          <div className="preview-fields">
+            <div><span className="preview-label">RECIPIENT</span><strong>Alex</strong></div>
+            <div><span className="preview-label">AMOUNT</span><strong>100.00 USDC</strong></div>
+            <div><span className="preview-label">NETWORK</span><strong>Arc</strong></div>
+            <div><span className="preview-label">CONTEXT</span><strong>Dinner</strong></div>
+          </div>
+          <div className="preview-state"><span className="state-icon"><Check size={14} /></span><div><strong>Ready for review</strong><small>Details prepared · No transaction sent</small></div><span className="state-tag">NOT AUTHORIZED</span></div>
+          <p className="preview-disclaimer">Illustrative interface only. Recipient resolution, risk checks, and wallet authorization are not connected in this demo.</p>
+        </div>
+      </section>
+
+      <section className="flow-section section-wrap" id="how-it-works" aria-labelledby="flow-title">
+        <div className="section-heading-row">
+          <div><p className="eyebrow">HOW IT WORKS</p><h2 id="flow-title">A simple conversation.<br /><em>You stay in control.</em></h2></div>
+          <span className="section-count">01 — 03</span>
+        </div>
+        <div className="steps-list">
+          {steps.map((step) => <div className="step-row" key={step.number}><span className="step-number">{step.number}</span><h3>{step.title}</h3><p>{step.detail}</p><ArrowUpRight size={17} /></div>)}
+        </div>
+      </section>
+
+      <section className="capabilities-section section-wrap" aria-labelledby="capabilities-title">
+        <div className="section-copy">
+          <p className="eyebrow">PAYMENT INTELLIGENCE</p>
+          <h2 id="capabilities-title">Context is<br /><em>the difference.</em></h2>
+        </div>
+        <div className="capability-list">
+          {capabilities.map(({ icon: Icon, title, detail }, index) => <div className="capability-row" key={title}><span className="capability-index">0{index + 1}</span><Icon size={20} strokeWidth={1.4} /><div><h3>{title}</h3><p>{detail}</p></div><ArrowUpRight size={15} className="capability-arrow" /></div>)}
+          <div className="capability-row planned-row"><span className="capability-index">04</span><LockKeyhole size={20} strokeWidth={1.4} /><div><h3>Rules and risk checks</h3><p>Apply spending limits and review signals before authorization.</p></div><span className="planned-label">PLANNED</span></div>
+        </div>
+      </section>
+
+      <section className="groups-section" id="groups" aria-labelledby="groups-title">
+        <div className="groups-art" aria-hidden="true"><div className="group-orbit orbit-a" /><div className="group-orbit orbit-b" /><Users size={40} strokeWidth={1} /></div>
+        <div className="groups-copy"><p className="eyebrow">SONUS GROUPS · PLANNED</p><h2 id="groups-title">Money moves<br /><em>better together.</em></h2><p>Coordinate shared expenses, payment requests, and group approvals without losing track of who owes what.</p><a className="text-link" href="#roadmap">Explore the roadmap <ArrowRight size={15} /></a></div>
+      </section>
+
+      <section className="security-section section-wrap" id="security" aria-labelledby="security-title">
+        <div className="section-copy"><p className="eyebrow">BUILT FOR CONTROL</p><h2 id="security-title">AI prepares.<br /><em>You authorize.</em></h2><p>Sonus is designed to explain a transaction—not control your keys.</p></div>
+        <div className="security-points"><div><Wallet size={19} /><span>Wallet authorization stays with you.</span></div><div><LockKeyhole size={19} /><span>Policies can define limits and approvals.</span></div><div><Check size={19} /><span>Review details before money moves.</span></div></div>
+      </section>
+
+      <section className="developers-section section-wrap" id="developers" aria-labelledby="developers-title">
+        <div className="developers-copy"><p className="eyebrow">FOR BUILDERS · PLANNED</p><h2 id="developers-title">Payment context,<br /><em>in your product.</em></h2><p>A future integration layer for apps and agents that need payment intent, context, and controls.</p><a className="secondary-link" href="#roadmap">View roadmap <ArrowRight size={15} /></a></div>
+        <div className="code-window" aria-label="Illustrative code sample"><div className="code-window-top"><span /><span /><span /><small>sonus / concept</small></div><pre><code><span className="code-muted">{"// Conceptual API — not live"}</span>{"\n"}<span className="code-key">const</span> payment = {"{"}{"\n"}  intent: <span className="code-string">"send"</span>,{"\n"}  recipient: <span className="code-string">"Alex"</span>,{"\n"}  amount: <span className="code-number">100</span>,{"\n"}  asset: <span className="code-string">"USDC"</span>{"\n"}{"}"}{";"}</code></pre></div>
+      </section>
+
+      <section className="roadmap-section section-wrap" id="roadmap" aria-labelledby="roadmap-title">
+        <div><p className="eyebrow">WHAT’S NEXT</p><h2 id="roadmap-title">Built in stages.</h2></div>
+        <p className="roadmap-note">Sonus is in development. These are planned milestones, not available features.</p>
+        <div className="roadmap-line"><div><span>01</span><strong>Core payment flow</strong><small>Intent and transaction preview</small></div><div><span>02</span><strong>Rules and safety</strong><small>Policies and risk signals</small></div><div><span>03</span><strong>Groups and SDK</strong><small>Shared payments and integrations</small></div></div>
+      </section>
+
+      <section className="final-cta" aria-labelledby="final-cta-title"><div className="cta-light" aria-hidden="true" /><p className="eyebrow">SONUS · PAYMENT INTELLIGENCE</p><h2 id="final-cta-title">Make every payment<br /><em>make sense.</em></h2><p>More understanding. More context. More control.</p><a className="primary-link" href="#top">Get started <ArrowUpRight size={16} /></a></section>
 
       <footer className="site-footer">
-        <div className="footer-topline"><span>THE FUTURE SHOULD FEEL HUMAN.</span><span>SONUS / END TRANSMISSION</span></div>
         <div className="footer-main">
-          <div><p className="footer-kicker">A clearer way forward.</p><h2>Let intent<br /><em>lead the way.</em></h2></div>
-          <a className="footer-cta" href="#top" aria-label="Return to top"><ArrowUpRight size={25} strokeWidth={1.4} /></a>
+          <div className="footer-brand-column"><a className="brand-lockup" href="#top" aria-label="Sonus home"><span className="sonus-symbol" aria-hidden="true"><i /><i /><i /></span><span className="brand-name">SONUS</span></a><p>The intelligence layer<br />for crypto payments.</p><span className="footer-note">Built for clarity. Designed for control.</span></div>
+          <div className="footer-links"><div><h3>PRODUCT</h3><a href="#product">Overview</a><a href="#how-it-works">How it works</a><a href="#demo">Payment preview</a><a href="#security">Security</a></div><div><h3>PLATFORM</h3><a href="#groups">Sonus Groups</a><a href="#developers">Developers</a><a href="#roadmap">Roadmap</a></div><div><h3>RESOURCES</h3><a href="#security">User control</a><a href="#demo">Demo disclaimer</a><a href="#developers">Contact</a></div></div>
         </div>
-        <div className="footer-bottom"><a className="footer-brand" href="#top">SONUS<span>.</span></a><span>PAYMENT INTELLIGENCE</span><span>© SONUS 2026</span></div>
+        <div className="footer-bottom"><span>© 2026 SONUS</span><span>PAYMENT INTELLIGENCE</span><a href="#top">BACK TO TOP ↑</a></div>
+        <div className="footer-wordmark" aria-label="Sonus">SONUS<span>.</span></div>
       </footer>
     </main>
   );
