@@ -3,7 +3,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   Check,
-  Code2,
   Fingerprint,
   LockKeyhole,
   MessageSquareText,
@@ -149,7 +148,7 @@ export default function Home() {
       <footer className="site-footer">
         <div className="footer-main">
           <div className="footer-brand-column"><a className="brand-lockup" href="#top" aria-label="Sonus home"><span className="sonus-symbol" aria-hidden="true"><i /><i /><i /></span><span className="brand-name">SONUS</span></a><p>The intelligence layer<br />for crypto payments.</p><span className="footer-note">Built for clarity. Designed for control.</span></div>
-          <div className="footer-links"><div><h3>PRODUCT</h3><a href="#product">Overview</a><a href="#how-it-works">How it works</a><a href="#demo">Payment preview</a><a href="#security">Security</a></div><div><h3>PLATFORM</h3><a href="#groups">Sonus Groups</a><a href="#developers">Developers</a><a href="#roadmap">Roadmap</a></div><div><h3>RESOURCES</h3><a href="#security">User control</a><a href="#demo">Demo disclaimer</a><a href="mailto:hello@sonus.example">Contact</a></div></div>
+          <div className="footer-links"><div><h3>PRODUCT</h3><a href="#product">Overview</a><a href="#how-it-works">How it works</a><a href="#demo">Payment preview</a><a href="#security">Security</a></div><div><h3>PLATFORM</h3><a href="#groups">Sonus Groups</a><a href="#developers">Developers</a><a href="#roadmap">Roadmap</a></div><div><h3>RESOURCES</h3><a href="#security">User control</a><a href="#demo">Demo disclaimer</a><a href="#developers">Contact</a></div></div>
         </div>
         <div className="footer-bottom"><span>© 2026 SONUS</span><span>PAYMENT INTELLIGENCE</span><a href="#top">BACK TO TOP ↑</a></div>
         <div className="footer-wordmark" aria-label="Sonus">SONUS<span>.</span></div>
