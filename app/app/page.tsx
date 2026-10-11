@@ -201,9 +201,12 @@ export default function SonusWorkspace() {
       const feeWhole = feeWei / 1000000000000000000n;
       const feeFraction = (feeWei % 1000000000000000000n) / 1000000000000n;
       const fee = Number(feeWhole) + Number(feeFraction) / 1000000;
-      const label = fee.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC (estimated)";
+      const balanceHex = await provider.request({ method: "eth_getBalance", params: [from, "latest"] }) as string;
+      const enoughFunds = BigInt(balanceHex) >= BigInt(value) + feeWei;
+      const label = fee.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC (estimated)" + (enoughFunds ? "" : " · insufficient for amount + fee");
       setIntent(current => current ? { ...current, feeEstimate: label } : current);
-      setNotice("Fee estimate received from Arc Testnet. This is an estimate, not a guarantee. Nothing was signed or sent.");
+      setWalletBalances(current => ({ ...current, native: (Number(BigInt(balanceHex) / 1000000000000n) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 }), status: enoughFunds ? "Balance covers amount + estimated fee at time of check" : "Warning: balance may not cover amount + estimated fee", updatedAt: Date.now() }));
+      setNotice((enoughFunds ? "Estimated fee received. " : "Warning: wallet balance appears insufficient for the amount plus estimated fee. ") + "This estimate can change; nothing was signed or sent.");
     } catch (error) { setNotice("Could not estimate fee: " + (error instanceof Error ? error.message : "request failed") + ". No transaction was sent."); }
     finally { setBalanceBusy(false); }
   }
