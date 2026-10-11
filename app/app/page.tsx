@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { useAccount, useDisconnect, useSwitchChain, useWalletClient } from "wagmi";
+import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
 import {
   Activity, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
   Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command,
@@ -89,6 +89,7 @@ export default function SonusWorkspace() {
   const [notice, setNotice] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Eip1193Provider | undefined>();
   const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
   const [balanceBusy, setBalanceBusy] = useState(false);
@@ -112,12 +113,10 @@ export default function SonusWorkspace() {
   const [swapCapabilitiesError, setSwapCapabilitiesError] = useState("");
   const recognition = useRef<SpeechRecognitionLike | null>(null);
   const paymentSubmissionLock = useRef(false);
-  const { address: connectedAddress, chainId: connectedChainId, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
+  const { address: connectedAddress, chainId: connectedChainId, isConnected, connector } = useAccount();
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
-  const selectedProvider = walletClient as unknown as Eip1193Provider | undefined;
 
   const visibleTransactions = transactionHistory.filter(item => {
     const query = historyQuery.trim().toLowerCase();
@@ -300,6 +299,25 @@ export default function SonusWorkspace() {
       window.clearInterval(timer);
     };
   }, [marketRefreshNonce]);
+
+  useEffect(() => {
+    // Resolve the provider from the exact connector selected in RainbowKit.
+    // A viem WalletClient is not an EIP-1193 provider and cannot be used with provider.request().
+    let active = true;
+    setSelectedProvider(undefined);
+    if (!isConnected || !connector) return () => { active = false; };
+    void connector.getProvider()
+      .then(provider => {
+        if (active) setSelectedProvider(provider as Eip1193Provider);
+      })
+      .catch(() => {
+        if (active) {
+          setSelectedProvider(undefined);
+          setNotice("Could not access the selected wallet provider. Disconnect and choose the wallet again.");
+        }
+      });
+    return () => { active = false; };
+  }, [connector, isConnected]);
 
   useEffect(() => {
     // Trust only the wallet connector explicitly selected in RainbowKit.
