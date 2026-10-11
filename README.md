@@ -62,6 +62,14 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 - A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
 - This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
 
+## Live market data
+
+The workspace Market Watch panel reads from `GET /api/market`, a server-side adapter for CoinGecko's public simple-price endpoint. It displays USD prices and 24-hour percentage changes for BTC, ETH, SOL, and USDC, updates on a 60-second interval, and shows an unavailable state rather than silently substituting hard-coded prices when the provider fails.
+
+The assistant endpoint can also append a live market snapshot when the detected intent is a market request. If CoinGecko is unavailable or rate-limits the request, Sonus reports that current prices could not be verified. Quotes are informational snapshots, not trading advice or executable swap quotes. Verify current values and fees with the relevant trading venue before taking action.
+
+Provider availability, API terms, and rate limits can change. The current integration uses the public endpoint without a key; production should use an appropriate provider plan or a controlled caching/proxy strategy if usage grows.
+
 ## AI assistant API
 
 The workspace chat now calls a server-side `POST /api/assistant` route. When configured, it uses the OpenAI Responses API with a strict JSON schema so the UI receives a bounded reply and a typed intent draft. The model cannot sign transactions or call wallet methods; wallet signing remains in the browser and requires the wallet's own confirmation.
