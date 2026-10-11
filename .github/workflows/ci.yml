@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - "redesign/**"
   pull_request:
     branches:
       - main
