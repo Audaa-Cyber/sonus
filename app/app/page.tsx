@@ -542,10 +542,13 @@ export default function SonusWorkspace() {
 
     const isLocalMemoryQuestion = /\b(?:payment history|transaction history|recent payments|recent transactions|show me my payments|list my transactions|what did i (?:pay|send)|what was (?:that|the|my) payment for|what was \d+(?:\.\d+)?\s*(?:USDC|USDT|ETH|SOL) for|why did i pay|find (?:my )?(?:payment|transaction))\b/i.test(clean);
     if (isLocalMemoryQuestion) {
-      const amountMatch = clean.match(/\b(\d+(?:\.\d+)?)\s*(USDC|USDT|ETH|SOL)?\b/i);
+      const hashMatch = clean.match(/0x[a-fA-F0-9]{64}/);
+      const amountMatch = clean.match(/\b(\d+(?:\.\d+)?)\s*(USDC|USDT|ETH|SOL)\b/i) || clean.match(/\b(?:pay|send|payment of|amount of)\s+(\d+(?:\.\d+)?)(?![a-fA-F0-9])/i);
       const queryTerms = clean.toLowerCase().match(/[a-z0-9]{3,}/g)?.filter(term => !["what", "did", "pay", "send", "was", "that", "the", "for", "why", "show", "list", "find", "recent", "payments", "payment", "transactions", "transaction", "history", "mine", "my"].includes(term) && !["usdc", "usdt", "eth", "sol"].includes(term)) || [];
       let matches = [...transactionHistory];
-      if (amountMatch) {
+      if (hashMatch) {
+        matches = matches.filter(item => item.hash.toLowerCase() === hashMatch[0].toLowerCase());
+      } else if (amountMatch) {
         matches = matches.filter(item => Number(item.amount) === Number(amountMatch[1]) && (!amountMatch[2] || item.asset.toLowerCase() === amountMatch[2].toLowerCase()));
       } else if (queryTerms.length) {
         matches = matches.filter(item => queryTerms.some(term => (item.note || "").toLowerCase().includes(term)));
