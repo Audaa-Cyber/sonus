@@ -163,3 +163,8 @@ Manual checks for the latest payment-control changes:
 - Test both guardrails independently: amount caps enabled with saved-recipient disabled, then saved-recipient enabled with amount caps disabled.
 - Confirm policy status in Settings and verify the payment review dialog describes the active local rules.
 - Change the spending rules in a second Sonus tab and verify the first tab updates; remove or corrupt the stored rule record and verify payment submission is paused.
+
+
+## Automated risk preflight tests
+
+Run `npm test` to execute the built-in Node test suite. The suite covers request parsing (malformed JSON, null, arrays, missing fields, oversized payloads), valid Arc Testnet review warnings, malformed/zero/self addresses, invalid amounts, and unsupported assets/networks/chain IDs. The deterministic rules live in `lib/risk-preflight.mjs` and are shared by the API route and tests, so the test suite exercises the same validation logic used by the endpoint. These tests do not simulate a real wallet, execute a transaction, or prove the transfer is safe.
