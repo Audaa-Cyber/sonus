@@ -4,12 +4,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Sonus deliberately selects Circle's App Kit as its swap integration.
+ * Sonus is investigating a first-party Arc/Circle swap path.
  *
- * This endpoint reports the real integration boundary; it does not fabricate
- * a quote or imply that a browser-connected wallet can currently execute swaps.
- * Arc/Circle first-party swap is server-side only today and requires a server-side
- * wallet adapter plus a Circle API/Kit key. Never add a user's private key here.
+ * Public documentation reviewed so far verifies Circle App Kit bridging, not a
+ * same-chain swap API. This endpoint reports that boundary without fabricating
+ * quotes. Do not assume an API or wallet adapter exists until verified.
  */
 export async function GET() {
   return NextResponse.json({
@@ -25,12 +24,12 @@ export async function GET() {
     supportedEnvironment: {
       arcTestnet: {
         chain: "Arc_Testnet",
-        supportedTokens: ["USDC", "EURC", "CIRBTC"],
-        caveat: "Testnet liquidity is limited; routes may be unavailable or revert."
+        supportedTokens: "Not verified",
+        caveat: "First-party same-chain swap support and token availability are not verified."
       },
       arcMainnet: {
         chain: "Arc",
-        supportedTokens: "Confirm current Circle App Kit supported-token matrix before enabling."
+        supportedTokens: "Not verified"
       }
     },
     nextRequirements: [
