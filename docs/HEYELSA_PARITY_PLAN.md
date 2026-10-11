@@ -11,14 +11,14 @@ Parity means working, tested end-to-end capability—not a navigation item, mock
 
 ## Current baseline
 
-The current app has a Next.js workspace, browser speech input, basic regex-based payment parsing, browser EVM wallet connection, Arc Testnet switching, native USDC balance reads, a gas estimate and preflight for Arc Testnet native USDC, wallet-mediated transaction submission, and transaction receipt polling. The send flow has not yet been independently smoke-tested in a browser. Prices, portfolio charts, and activity examples are illustrative. The chat does not yet call a live LLM.
+The current app has a Next.js workspace, browser speech input, a server-side OpenAI Responses API intent route when configured, browser EVM wallet connection, Arc Testnet switching, native USDC balance reads, a gas estimate and preflight for Arc Testnet native USDC, wallet-mediated transaction submission, and transaction receipt polling. Live CoinGecko spot prices are available for BTC, ETH, SOL, and USDC when the provider responds. Portfolio charts and activity examples remain illustrative. The send flow has not yet been independently smoke-tested in a browser.
 
 Current limitations:
-- No production AI/tool orchestration.
+- The LLM currently creates validated intent drafts and explanatory text; there is no general-purpose tool execution framework.
 - No recipient/name resolution or verified contact book.
 - No payment memory or configurable policy engine.
 - No dedicated transaction simulation or comprehensive risk engine.
-- No live multi-chain portfolio, market/news, swaps, bridge execution, staking/yield, limit orders, perpetuals, token creation, or developer SDK/API.
+- No live multi-chain portfolio, market/news intelligence, swaps, bridge execution, staking/yield, limit orders, perpetuals, token creation, or developer SDK/API.
 - Arc Testnet native USDC support does not imply that third-party data, swap, bridge, or yield providers support Arc Testnet.
 
 ## Feature-by-feature maturity targets
