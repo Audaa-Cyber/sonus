@@ -36,7 +36,8 @@ create table if not exists public.transaction_ledger (
   constraint transaction_ledger_confirmations_valid check (confirmation_count >= 0),
   constraint transaction_ledger_reconciled_status check (
     status in ('submitted', 'pending') or reconciled_at is not null
-  )
+  ),
+  constraint transaction_ledger_id_user_id_unique unique (id, user_id)
 );
 
 create unique index if not exists transaction_ledger_user_chain_hash_uidx
@@ -155,3 +156,59 @@ revoke all on public.transaction_ledger from anon;
 revoke update, delete, truncate on public.transaction_ledger from authenticated;
 grant select, insert on public.transaction_ledger to authenticated;
 grant select, insert, update, delete on public.transaction_ledger to service_role;
+
+
+-- Append-only receipt/status observations. Clients may read their own events,
+-- but only the trusted server role may append observations.
+create table if not exists public.transaction_ledger_events (
+  id uuid primary key default gen_random_uuid(),
+  transaction_id uuid not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  status text not null,
+  block_number bigint,
+  block_hash text,
+  confirmation_count integer not null default 0,
+  detail text,
+  source text not null default 'arc_rpc',
+  observed_at timestamptz not null default now(),
+
+  constraint transaction_ledger_events_owner_fk
+    foreign key (transaction_id, user_id)
+    references public.transaction_ledger (id, user_id)
+    on delete cascade,
+  constraint transaction_ledger_events_status_valid
+    check (status in ('submitted', 'pending', 'confirmed', 'failed', 'reorged')),
+  constraint transaction_ledger_events_block_number_valid
+    check (block_number is null or block_number >= 0),
+  constraint transaction_ledger_events_block_hash_format
+    check (block_hash is null or lower(block_hash) ~ '^0x[a-f0-9]{64}$'),
+  constraint transaction_ledger_events_confirmations_valid
+    check (confirmation_count >= 0),
+  constraint transaction_ledger_events_source_nonempty
+    check (length(trim(source)) between 1 and 80)
+);
+
+create index if not exists transaction_ledger_events_tx_observed_idx
+  on public.transaction_ledger_events (transaction_id, observed_at desc);
+
+alter table public.transaction_ledger_events enable row level security;
+
+drop policy if exists "Users can read their own transaction ledger events" on public.transaction_ledger_events;
+create policy "Users can read their own transaction ledger events"
+  on public.transaction_ledger_events
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.transaction_ledger ledger
+      where ledger.id = transaction_id
+        and ledger.user_id = (select auth.uid())
+    )
+  );
+
+revoke all on public.transaction_ledger_events from anon;
+revoke insert, update, delete, truncate on public.transaction_ledger_events from authenticated;
+revoke update, delete, truncate on public.transaction_ledger_events from service_role;
+grant select on public.transaction_ledger_events to authenticated;
+grant select, insert on public.transaction_ledger_events to service_role;
