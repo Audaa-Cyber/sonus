@@ -28,7 +28,6 @@ npm install
 npm run dev
 ```
 
-
 ## V1 payment workspace status
 
 All work in this iteration is on `redesign/dark-signal-landing`. The `main` branch is not modified by these changes.
@@ -70,6 +69,18 @@ The assistant endpoint can also append a live market snapshot when the detected 
 
 Provider availability, API terms, and rate limits can change. The current integration uses the public endpoint without a key; production should use an appropriate provider plan or a controlled caching/proxy strategy if usage grows.
 
+## Swap provider decision
+
+Sonus has selected **Circle App Kit Swap** as its intended swap provider. It will not silently fall back to 0x or LI.FI.
+
+- `GET /api/swap/capabilities` reports the provider choice and current readiness boundary without fabricating a quote.
+- Circle's current App Kit documentation describes Swap as server-side only. Sonus's current user-controlled browser-wallet flow is not yet compatible with Circle's required server-side wallet adapter.
+- Arc Testnet swap coverage is limited (USDC, EURC, and cirBTC), and liquidity may be thin. Supported tokens and networks must be checked before a real quote is shown.
+- Sonus must not ask users to paste private keys or quietly use a Sonus-controlled wallet to trade on their behalf. A quote and execution design that preserves clear user authorization is required before enabling swaps.
+- No live swap quote or swap execution is implemented yet. The endpoint is a capability/status response, not a swap quote.
+
+Reference: Circle App Kit documentation at `https://docs.arc.network/app-kit`.
+
 ## AI assistant API
 
 The workspace chat now calls a server-side `POST /api/assistant` route. When configured, it uses the OpenAI Responses API with a strict JSON schema so the UI receives a bounded reply and a typed intent draft. The model cannot sign transactions or call wallet methods; wallet signing remains in the browser and requires the wallet's own confirmation.
@@ -91,18 +102,4 @@ The key is read only by the server route. Do not add it to client-side code, com
 
 ## Verification
 
-GitHub Actions runs typecheck, lint, and production build checks. Check the workflow status on the [Sonus checks page](https://github.com/Audaa-Cyber/sonus/actions/workflows/ci.yml).
-
-
-### Manual Arc Testnet smoke test
-
-1. Open the workspace in a desktop browser with an EVM wallet extension.
-2. Connect a wallet and use the network control to add/switch to Arc Testnet.
-3. If you need test funds, use the [Circle testnet faucet](https://faucet.circle.com). Never use a mainnet wallet balance for this test.
-4. Refresh the live native USDC balance.
-5. Ask Sonus to prepare a payment to a wallet address you control on Arc Testnet, for example `Send 0.01 USDC to 0x<your-test-wallet-address>`.
-6. Select **Arc Testnet**, then choose **Estimate fee**. Confirm the estimated fee and balance warning.
-7. Only if you intentionally want to test a transfer, choose **Send test payment**, verify the sender, recipient, amount, and fee in Sonus, then verify the same details again in the wallet popup.
-8. Follow the transaction status and verify the result on [Arcscan Testnet](https://testnet.arcscan.app).
-
-Use a test wallet and testnet funds only. A valid address format does not prove that the address belongs to the intended recipient.
+GitHub Actions runs typecheck, lint, and production build checks. Check the workflow status on the Sonus branch and pull request before deploying.
