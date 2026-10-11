@@ -183,8 +183,9 @@ export default function SonusWorkspace() {
     if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient is not a wallet address. Resolve it before estimating fees."); return; }
     if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only."); return; }
     const match = intent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
-    if (!match || BigInt(match[1]) <= 0n) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
+    if (!match) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
     const units6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
+    if (units6 <= 0n) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
     const value = "0x" + (units6 * 1000000000000n).toString(16);
     setBalanceBusy(true);
     setNotice("Estimating gas on Arc Testnet. No transaction will be sent.");
