@@ -622,7 +622,7 @@ export default function SonusWorkspace() {
 
   function saveContact(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = contactNameInput.trim().replace(/\\s+/g, " ");
+    const name = contactNameInput.trim().replace(/\s+/g, " ");
     const address = contactAddressInput.trim();
     if (name.length < 1 || name.length > 50) { setContactFormError("Use a contact name between 1 and 50 characters."); return; }
     if (!EVM_ADDRESS_RE.test(address) || /^0x0{40}$/i.test(address)) { setContactFormError("Enter a valid, non-zero EVM address."); return; }
