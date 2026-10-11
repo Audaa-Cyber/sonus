@@ -53,8 +53,8 @@ function buildReply(input: string): { reply: string; intent?: Intent } {
   const send = /\b(send|pay|transfer)\b/i.test(text);
   if (send) {
     const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|usd)?/i);
-    const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
-    const asset = (amountMatch?.[2] || "USDC").toUpperCase();
+    const recipientMatch = text.match(/\bto\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
+    const asset = (amountMatch?.[2] || "").toUpperCase();
     const amount = amountMatch?.[1] ? (amountMatch[1].startsWith(".") ? "0" + amountMatch[1] : amountMatch[1]) : "";
     const recipient = recipientMatch?.[1] || "";
     if (!amount || !recipient || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !SUPPORTED_DRAFT_ASSETS.has(asset)) {
