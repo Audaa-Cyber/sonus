@@ -20,6 +20,23 @@ type AssistantIntent = {
 
 type AssistantOutput = { reply: string; intent: AssistantIntent };
 
+const WINDOW_MS = 60_000;
+const MAX_REQUESTS_PER_WINDOW = 30;
+const requestWindows = new Map<string, { startedAt: number; count: number }>();
+
+function isRateLimited(request: Request): boolean {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const key = forwarded || request.headers.get("x-real-ip") || "local";
+  const now = Date.now();
+  const current = requestWindows.get(key);
+  if (!current || now - current.startedAt >= WINDOW_MS) {
+    requestWindows.set(key, { startedAt: now, count: 1 });
+    return false;
+  }
+  current.count += 1;
+  return current.count > MAX_REQUESTS_PER_WINDOW;
+}
+
 function localFallback(message: string): AssistantOutput {
   const text = message.trim();
   const isTransfer = /\b(send|pay|transfer)\b/i.test(text);
@@ -86,6 +103,9 @@ function validateOutput(value: unknown): AssistantOutput {
 }
 
 export async function POST(request: Request) {
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > 20_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
+  if (isRateLimited(request)) return NextResponse.json({ error: "Too many assistant requests. Wait a minute and try again." }, { status: 429 });
   let body: unknown;
   try {
     body = await request.json();
