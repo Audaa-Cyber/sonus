@@ -41,3 +41,24 @@ test("does not trust malformed or mismatched receipt data", () => {
   assert.equal(classifyReceipt(hash, receipt(), "latest").status, "unknown");
   assert.equal(classifyReceipt("bad-hash", null, "0x65").status, "unknown");
 });
+
+
+test("requires a verifiable canonical block before treating a receipt as confirmed", () => {
+  const withBlock = receipt({ blockHash: "0x" + "b".repeat(64) });
+  const verified = classifyReceipt(hash, withBlock, "0x65", { hash: "0x" + "b".repeat(64) });
+  assert.equal(verified.status, "confirmed");
+
+  const mismatch = classifyReceipt(hash, withBlock, "0x65", { hash: "0x" + "c".repeat(64) });
+  assert.equal(mismatch.status, "reorged");
+  assert.equal(mismatch.confirmations, 0);
+  assert.match(mismatch.detail, /canonical block/i);
+
+  const unavailable = classifyReceipt(hash, withBlock, "0x65", null);
+  assert.equal(unavailable.status, "unknown");
+  assert.match(unavailable.detail, /could not be verified/i);
+});
+
+test("rejects missing block hashes when canonical verification is requested", () => {
+  const result = classifyReceipt(hash, receipt(), "0x65", { hash: "0x" + "b".repeat(64) });
+  assert.equal(result.status, "unknown");
+});
