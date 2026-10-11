@@ -42,6 +42,7 @@ Implemented in the workspace:
 - Basic comparison of the draft amount plus estimated fee against the wallet's current native balance.
 - Voice input through the browser's speech-recognition API where supported.
 - Local saved-recipient address book with name-to-address matching for explicitly saved contacts.
+- Browser-local transaction memory for payments submitted through Sonus, including the transaction hash and initial confirmation status.
 
 ### Arc Testnet configuration
 
@@ -58,9 +59,13 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 - A wallet-approved native USDC transfer can be submitted on Arc Testnet after an in-page review and the wallet's own confirmation. Sonus does not receive or store private keys. This path is testnet-only.
 - Fee estimation and submission are currently limited to native USDC transfers on Arc Testnet.
 - Saved recipient names can resolve to addresses explicitly saved in the current browser. This address book is local to that browser, is not synced, and does not verify real-world identity or address ownership. Unknown names still require a wallet address.
-- The dashboard's portfolio chart and activity examples are illustrative, not live. The Market Watch panel uses a separate live market-data endpoint when the provider is available.
+- The portfolio chart remains illustrative. Recent activity and the Activity page now show transaction records created by Sonus after a wallet returns a transaction hash; they are stored locally in this browser, not synced, and are not a complete wallet history/indexer. Only the Arc Testnet native-USDC send flow currently writes records.
 - A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
 - This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
+
+## Local transaction memory
+
+After the connected wallet returns a valid transaction hash for an Arc Testnet native-USDC payment, Sonus saves the sender, recipient, amount, network, hash, timestamp, and latest status observed by its initial receipt-polling loop. The Overview recent-activity panel and Activity page use these records rather than fabricated sample payments. Records are stored in browser `localStorage` under `sonus:transactions:v1`, capped at 100 entries, and are not uploaded or synced. This is not a full wallet indexer; transactions made elsewhere will not automatically appear. A `pending` status means the initial polling window did not find a receipt or polling was interrupted. Verify the latest state in Arcscan before retrying. Browser data can be cleared, and production payment memory should eventually use an authenticated, privacy-conscious persistent store with chain indexing and reorg-aware status reconciliation.
 
 ## Saved recipient address book
 
