@@ -45,7 +45,11 @@ export async function GET(request: Request) {
       return error("The configured RPC did not identify itself as Arc Testnet.", 502);
     }
 
-    const result = classifyReceipt(hash, receipt, latestBlock);
+    const canonicalBlock = receipt && typeof receipt === "object" && !Array.isArray(receipt) &&
+      typeof (receipt as Record<string, unknown>).blockNumber === "string"
+      ? await rpc("eth_getBlockByNumber", [(receipt as Record<string, string>).blockNumber, false])
+      : receipt === null ? undefined : null;
+    const result = classifyReceipt(hash, receipt, latestBlock, canonicalBlock);
     if (result.status === "unknown") {
       return NextResponse.json({ error: "Arc RPC returned an unrecognized receipt response." }, {
         status: 502,
