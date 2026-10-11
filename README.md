@@ -186,3 +186,18 @@ Run `npm test` to execute the built-in Node test suite. The suite covers request
 A Supabase SQL migration is included at `supabase/migrations/20261011000000_transaction_ledger.sql`. It creates a per-user transaction table, a duplicate guard on `(user, chain, transaction hash)`, query indexes, an `updated_at` trigger, and row-level security. Authenticated users can read their own rows and insert only `submitted` records; they cannot update or delete ledger rows directly. It also creates an append-only receipt-observation table linked to each transaction and owner, so future reconciliation can preserve status changes (including reorganization observations) instead of overwriting history. Only the trusted server role can append those events or update ledger status.
 
 **This is a schema foundation, not a live database integration.** Sonus does not yet initialize Supabase Auth or a database client, and the Activity UI still uses browser-local storage. Before enabling this ledger, create a Supabase project with Auth, apply the migration, configure server-only credentials, wire sign-in/session handling, and add a server route that verifies the signed-in user before inserting or reading rows. Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser code. Do not accept a client-supplied `user_id` as proof of identity; derive it from the verified Supabase session. Do not grant browser users update permissions for reconciliation fields.
+
+
+## AI assistant provider configuration
+
+The assistant supports providers that implement OpenAI-compatible Chat Completions and JSON mode. Copy `.env.example` to `.env.local` and configure these server-only variables:
+
+```env
+SONUS_AI_API_KEY=your_provider_api_key
+SONUS_AI_BASE_URL=https://api.openai.com/v1
+SONUS_AI_MODEL=gpt-4.1-mini
+```
+
+For Clean APIs, use the API root and exact model ID shown in your provider dashboard. For example, if your account supports the model, set `SONUS_AI_BASE_URL=https://cleanapis.com/v1` and `SONUS_AI_MODEL=gemini-3.7-flash`. The existing `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` names remain supported as fallback aliases. Never use a `NEXT_PUBLIC_` prefix for an API key. Restart the development server after changing environment variables.
+
+The route validates the assistant output and only prepares payment intent; it does not sign or execute transactions. Providers must support the OpenAI Chat Completions message format and JSON mode. A successful build does not prove that a particular model is enabled for the configured account.
