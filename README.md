@@ -82,6 +82,7 @@ Manual cases to verify locally:
 - Connect the intended wallet and verify Settings shows the recorded UTC-day total for that sender; failed records should not count toward the displayed total.
 - Enable the saved-recipient rule and attempt a payment to an address absent from Contacts; verify Sonus blocks before wallet confirmation. Add the exact address and verify the rule permits proceeding to the normal preflight.
 - Confirm the wallet-review dialog states whether amount limits and saved-recipient checks are enabled, before asking the wallet to approve.
+- Submit a test payment and verify Activity preserves the policy snapshot from submission when its transaction status later updates.
 - Enter an invalid limit and verify it is not persisted; simulate unavailable or malformed rule storage and verify the send flow fails closed.
 
 ## Saved recipient address book
@@ -141,7 +142,7 @@ The key is read only by the server route. Do not add it to client-side code, com
 
 ## Local spending guardrails
 
-The Settings page offers optional per-payment and daily recorded-spending limits for Arc Testnet native-USDC transfers, plus an option to block recipients not in the local saved-contacts address book. When enabled, Sonus checks these limits before opening the wallet confirmation flow. The daily total uses the UTC calendar day and counts non-failed records for the current sender that are present in the browser's capped local transaction history. Rules are saved under `sonus:spending-rules:v1` in local storage and are disabled by default. If rule storage is unavailable or contains an invalid saved configuration, Sonus pauses sending until storage is available and the settings can be saved. The Settings screen shows whether the saved rule configuration loaded successfully.
+The Settings page offers optional per-payment and daily recorded-spending limits for Arc Testnet native-USDC transfers, plus an option to block recipients not in the local saved-contacts address book. When enabled, Sonus checks these limits before opening the wallet confirmation flow. The daily total uses the UTC calendar day and counts non-failed records for the current sender that are present in the browser's capped local transaction history. Rules are saved under `sonus:spending-rules:v1` in local storage and are disabled by default. If rule storage is unavailable or contains an invalid saved configuration, Sonus pauses sending until storage is available and the settings can be saved. The Settings screen shows whether the saved rule configuration loaded successfully. When Sonus records a submitted payment, the local transaction entry also preserves a snapshot of which local policy checks were active at submission.
 
 The saved-recipient check compares the exact destination address and does not verify the real-world identity behind a contact name. These are client-side convenience checks, not secure wallet permissions or a production policy engine. Local storage can be modified or cleared, the history is capped at 100 records, and activity from other apps or devices is not included. Do not rely on this feature as the only control for valuable assets. Wallet confirmation and independent transaction review remain required.
 
