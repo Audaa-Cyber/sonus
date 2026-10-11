@@ -99,7 +99,7 @@ Provider availability, API terms, and rate limits can change. The current integr
 
 ## Transaction risk preflight
 
-Before Sonus opens the wallet approval step for its Arc Testnet native-USDC send flow, it calls `POST /api/risk/preflight`. The endpoint blocks malformed EVM addresses, the zero address, self-transfers, invalid/non-positive amounts, and unsupported network/asset combinations. It also warns that testnet funds are not real funds and that an address format does not verify recipient identity.
+Before Sonus opens the wallet approval step for its Arc Testnet native-USDC send flow, it calls `POST /api/risk/preflight`. The endpoint reads request bodies with an 8 KB UTF-8 byte ceiling, rejects malformed EVM addresses, zero sender/recipient addresses, self-transfers, invalid/non-positive amounts, amounts above 1,000,000,000 USDC, and unsupported network/asset combinations. It also warns that testnet funds are not real funds and that an address format does not verify recipient identity.
 
 This is a **deterministic parameter check only**, not a security scanner. It does not query phishing lists, inspect token contracts, simulate execution, verify recipient ownership, or guarantee safety. The endpoint returns `securityProviderConnected: false` to make that limitation explicit. The send flow fails closed if the endpoint is unavailable, and the wallet still presents the final transaction for user authorization.
 
@@ -150,7 +150,7 @@ The saved-recipient check compares the exact destination address and does not ve
 
 The wallet send handler now has an in-memory submission lock to reduce accidental duplicate prompts from rapid repeated clicks in one page instance. It is not a cross-tab or server-side idempotency guarantee; users must still check transaction status before retrying.
 
-The risk preflight endpoint rejects malformed JSON, oversized requests, and non-object JSON payloads with client errors rather than dereferencing `null` or array input. These are input-hardening measures, not a substitute for a transaction simulator, address reputation service, or server-enforced spending policy.
+The risk preflight endpoint rejects malformed JSON, oversized requests, and non-object JSON payloads with client errors rather than dereferencing `null` or array input. It enforces the 8 KB body ceiling while streaming the request, rather than buffering an arbitrarily large body first. Amount validation matches the workspace's configured 1,000,000,000 USDC maximum and blocks the zero sender address. These are input-hardening measures, not a substitute for a transaction simulator, address reputation service, or server-enforced spending policy.
 
 ## Verification
 
