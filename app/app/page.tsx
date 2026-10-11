@@ -249,6 +249,7 @@ export default function SonusWorkspace() {
       const confirmed = window.confirm("Review Arc Testnet payment\n\nFrom: " + from + "\nTo: " + intent.recipient + "\nAmount: " + amountLabel + "\nEstimated network fee: " + fee + " USDC\n\nThis will open your wallet for final approval. Only approve if these details are correct.");
       if (!confirmed) { setNotice("Payment cancelled before opening the wallet. Nothing was sent."); return; }
       const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16), gas: "0x" + gasLimit.toString(16) }] }) as string;
+      if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) throw new Error("Wallet returned an invalid transaction hash.");
       setPaymentTx({ hash, status: "submitted", detail: "Submitted to your wallet. Waiting for Arc Testnet confirmation." });
       setNotice("Transaction submitted. Your wallet approved it; waiting for on-chain status.");
       for (let attempt = 0; attempt < 25; attempt++) {
