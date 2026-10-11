@@ -452,20 +452,16 @@ export default function SonusWorkspace() {
       let stillPending = 0;
       for (const item of unresolved) {
         if (item.network !== "Arc Testnet" || item.asset !== "USDC") continue;
-        const response = await fetch("/api/transactions/receipt", {
-          method: "POST",
+        const response = await fetch("/api/transactions/receipt?hash=" + encodeURIComponent(item.hash), {
           cache: "no-store",
-          headers: { Accept: "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify({ txHash: item.hash, chainId: ARC_TESTNET_CHAIN_ID })
+          headers: { Accept: "application/json" }
         });
         const payload: unknown = await response.json();
         if (!response.ok || !payload || typeof payload !== "object") {
           throw new Error("Receipt service could not verify " + item.hash.slice(0, 10) + "…");
         }
         const receipt = payload as { status?: unknown; blockNumber?: unknown; confirmations?: unknown; detail?: unknown };
-        const blockNumber = typeof receipt.blockNumber === "number" && Number.isSafeInteger(receipt.blockNumber)
-          ? String(receipt.blockNumber)
-          : typeof receipt.blockNumber === "string" ? receipt.blockNumber : undefined;
+        const blockNumber = typeof receipt.blockNumber === "string" ? receipt.blockNumber : undefined;
         if (receipt.status === "pending") { stillPending++; continue; }
         if (receipt.status === "reorged") {
           recordTransaction({
