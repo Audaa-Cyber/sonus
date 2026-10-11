@@ -130,7 +130,7 @@ export default function SonusWorkspace() {
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setTransactionHistory(parsed.filter((item): item is StoredTransaction => Boolean(item) && typeof item.hash === "string" && /^0x[a-fA-F0-9]{64}$/.test(item.hash) && typeof item.from === "string" && EVM_ADDRESS_RE.test(item.from) && typeof item.to === "string" && EVM_ADDRESS_RE.test(item.to) && typeof item.amount === "string" && typeof item.asset === "string" && typeof item.network === "string" && ["submitted", "confirmed", "failed", "pending"].includes(item.status) && typeof item.detail === "string" && typeof item.createdAt === "number" && typeof item.updatedAt === "number").slice(0, 100));
+          setTransactionHistory(parsed.filter((item): item is StoredTransaction => Boolean(item) && typeof item.hash === "string" && /^0x[a-fA-F0-9]{64}$/.test(item.hash) && typeof item.from === "string" && EVM_ADDRESS_RE.test(item.from) && typeof item.to === "string" && EVM_ADDRESS_RE.test(item.to) && typeof item.amount === "string" && typeof item.asset === "string" && typeof item.network === "string" && ["submitted", "confirmed", "failed", "pending"].includes(item.status) && typeof item.detail === "string" && (item.note === undefined || typeof item.note === "string") && typeof item.createdAt === "number" && typeof item.updatedAt === "number").slice(0, 100));
         }
       }
     } catch {
