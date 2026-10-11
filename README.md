@@ -78,6 +78,7 @@ Manual cases to verify locally:
 - Add a payment note, reload the page, and confirm the note remains on the same transaction.
 - Export JSON and confirm it contains the current local records and notes; no request should be sent to a server.
 - Ask about recent payments or a saved payment note and verify the answer is based only on local Sonus records; the assistant API should not be called for these memory questions.
+- Enable spending guardrails, set a per-payment limit below the draft amount, and verify Sonus blocks before opening the wallet confirmation; then test a daily cap against recorded same-sender transactions.
 
 ## Saved recipient address book
 
@@ -133,6 +134,12 @@ The key is read only by the server route. Do not add it to client-side code, com
 - Structured output is validated server-side before being returned to the UI.
 - The route limits request/message size and history length, applies a 25-second upstream timeout, and includes a basic in-memory limit of 30 requests per IP per minute. This limit is process-local and can reset or differ across serverless instances; it is not production-grade protection. Production still needs durable per-user/IP rate limiting, usage budgets, authentication, request monitoring, and abuse protection.
 - Do not treat model interpretation as authorization. The UI and wallet must continue to validate the exact transaction independently.
+
+## Local spending guardrails
+
+The Settings page offers optional per-payment and daily recorded-spending limits for Arc Testnet native-USDC transfers. When enabled, Sonus checks these limits before opening the wallet confirmation flow. The daily total uses the UTC calendar day and counts non-failed records for the current sender that are present in the browser's capped local transaction history. Rules are saved under `sonus:spending-rules:v1` in local storage and are disabled by default.
+
+These are client-side convenience checks, not secure wallet permissions or a production policy engine. Local storage can be modified or cleared, the history is capped at 100 records, and activity from other apps or devices is not included. Do not rely on this feature as the only control for valuable assets. Wallet confirmation and independent transaction review remain required.
 
 ## Verification
 
