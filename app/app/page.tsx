@@ -461,6 +461,12 @@ export default function SonusWorkspace() {
       const from = accounts?.[0];
       if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before sending."); return; }
       transactionSender = from;
+      if (spendingRules.requireSavedRecipient) {
+        if (!contactsReady || !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase())) {
+          setNotice("Recipient rule blocked this payment: this recipient is not in your saved contacts. Save and verify the exact address in Contacts, or disable the saved-recipient rule in Settings.");
+          return;
+        }
+      }
       if (spendingRules.enabled) {
         if (!spendingRulesReady) { setNotice("Spending rules are still loading. No transaction was sent; try again."); return; }
         const maxSingle = Number(spendingRules.maxSingleUsdc);
@@ -468,12 +474,6 @@ export default function SonusWorkspace() {
         if (!Number.isFinite(maxSingle) || maxSingle <= 0 || !Number.isFinite(dailyCap) || dailyCap <= 0) {
           setNotice("Your spending rules are invalid. Update them in Settings before sending.");
           return;
-        }
-        if (spendingRules.requireSavedRecipient) {
-          if (!contactsReady || !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase())) {
-            setNotice("Spending rule blocked this payment: this recipient is not in your saved contacts. Save and verify the exact address in Contacts, or disable the saved-recipient rule in Settings.");
-            return;
-          }
         }
         const requested = Number(intent.amount);
         if (requested > maxSingle) {
