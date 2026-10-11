@@ -285,3 +285,6 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 .ws-contact-disclaimer svg{flex-shrink:0;margin-top:2px}
 .ws-contact-error{margin:12px 0 0;color:#e7ad9e;font-size:10px;line-height:1.6}
 @media(max-width:650px){.ws-contacts-panel{padding:17px}.ws-contact-form{grid-template-columns:1fr;gap:12px}.ws-contact-form button{width:100%}.ws-contact-row{gap:8px}.ws-contact-info small{font-size:8px}.ws-contact-row>button{padding:0 7px}}
+
+.ws-recipient-save{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:5px 7px;border:1px solid rgba(168,215,196,.25);background:transparent;color:var(--ws-green);font:9px var(--font-body);cursor:pointer}
+.ws-recipient-save:hover{background:rgba(168,215,196,.07)}
