@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (!value) continue;
       bytesRead += value.byteLength;
       if (bytesRead > MAX_BODY_BYTES) {
         await reader.cancel("Request body exceeds the allowed size.");
