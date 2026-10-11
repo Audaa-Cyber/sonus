@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 
 type Message = { role: "assistant" | "user"; text: string };
-type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string };
-type WalletBalances = { native: string | null; usdc: string | null; status: string; updatedAt: number | null };
+type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string; feeEstimate?: string };
+type WalletBalances = { native: string | null; status: string; updatedAt: number | null };
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
@@ -77,7 +77,7 @@ export default function SonusWorkspace() {
   const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
   const [balanceBusy, setBalanceBusy] = useState(false);
-  const [walletBalances, setWalletBalances] = useState<WalletBalances>({ native: null, usdc: null, status: "Not loaded", updatedAt: null });
+  const [walletBalances, setWalletBalances] = useState<WalletBalances>({ native: null, status: "Not loaded", updatedAt: null });
   const recognition = useRef<any>(null);
 
   useEffect(() => {
@@ -86,13 +86,13 @@ export default function SonusWorkspace() {
     const handleAccounts = (...args: unknown[]) => {
       const accounts = args[0] as string[];
       setWalletAddress(accounts?.[0] || null);
-      setWalletBalances({ native: null, usdc: null, status: accounts?.[0] ? "Refresh required" : "Not connected", updatedAt: null });
+      setWalletBalances({ native: null, status: accounts?.[0] ? "Refresh required" : "Not connected", updatedAt: null });
     };
     const handleChain = (...args: unknown[]) => {
       const value = args[0];
       const parsed = typeof value === "string" ? Number.parseInt(value, 16) : Number(value);
       setWalletChainId(Number.isFinite(parsed) ? parsed : null);
-      setWalletBalances({ native: null, usdc: null, status: "Network changed · refresh required", updatedAt: null });
+      setWalletBalances({ native: null, status: "Network changed · refresh required", updatedAt: null });
     };
     provider.on("accountsChanged", handleAccounts);
     provider.on("chainChanged", handleChain);
@@ -119,7 +119,7 @@ export default function SonusWorkspace() {
       const parsedChain = Number.parseInt(chain, 16);
       setWalletAddress(accounts?.[0] || null);
       setWalletChainId(Number.isFinite(parsedChain) ? parsedChain : null);
-      setWalletBalances({ native: null, usdc: null, status: "Connected · balance not loaded", updatedAt: null });
+      setWalletBalances({ native: null, status: "Connected · balance not loaded", updatedAt: null });
       setNotice(accounts?.[0] ? "Wallet connected. Sonus can read your public address and network. No transaction has been signed or sent." : "The wallet did not return an account.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Wallet connection was cancelled or failed.";
@@ -130,12 +130,23 @@ export default function SonusWorkspace() {
   }
 
 
+  async function switchToArcTestnet() {
+    const provider = window.ethereum;
+    if (!provider) { setNotice("Open Sonus in a browser with an EVM wallet to switch networks."); return; }
+    try {
+      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x4cef52" }] });
+    } catch (error) {
+      if ((error as { code?: number })?.code === 4902) {
+        try {
+          await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: "0x4cef52", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://rpc.testnet.arc.network"], blockExplorerUrls: ["https://testnet.arcscan.app"] }] });
+        } catch (addError) { setNotice("Could not add Arc Testnet: " + (addError instanceof Error ? addError.message : "request failed")); }
+      } else { setNotice("Network switch cancelled or failed: " + (error instanceof Error ? error.message : "request failed")); }
+    }
+  }
+
   async function refreshWalletBalances() {
     const provider = window.ethereum;
-    if (!provider || !walletAddress) {
-      setNotice("Connect a browser wallet before reading balances.");
-      return;
-    }
+    if (!provider || !walletAddress) { setNotice("Connect a browser wallet before reading balances."); return; }
     setBalanceBusy(true);
     setWalletBalances(current => ({ ...current, status: "Reading wallet…" }));
     try {
@@ -143,48 +154,63 @@ export default function SonusWorkspace() {
       const chainId = Number.parseInt(chainValue, 16);
       if (chainId !== ARC_TESTNET_CHAIN_ID) {
         setWalletChainId(Number.isFinite(chainId) ? chainId : null);
-        setWalletBalances({ native: null, usdc: null, status: "Switch to Arc Testnet to read this balance.", updatedAt: null });
+        setWalletBalances({ native: null, status: "Switch to Arc Testnet to read native USDC.", updatedAt: null });
         return;
       }
-      const accountValue = await provider.request({ method: "eth_accounts" }) as string[];
-      const account = accountValue?.[0];
+      const accounts = await provider.request({ method: "eth_accounts" }) as string[];
+      const account = accounts?.[0];
       if (!account || account.toLowerCase() !== walletAddress.toLowerCase()) {
-        setWalletBalances({ native: null, usdc: null, status: "Wallet account changed. Reconnect and retry.", updatedAt: null });
+        setWalletBalances({ native: null, status: "Wallet account changed. Reconnect and retry.", updatedAt: null });
         return;
       }
-      const nativeHex = await provider.request({ method: "eth_getBalance", params: [account, "latest"] }) as string;
-      const nativeWei = BigInt(nativeHex);
-      const nativeBalance = (Number(nativeWei / 1000000000000n) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 });
-      let usdc: string | null = null;
-      const tokenAddress = process.env.NEXT_PUBLIC_ARC_TESTNET_USDC_ADDRESS;
-      if (tokenAddress && EVM_ADDRESS_RE.test(tokenAddress)) {
-        const paddedAddress = account.slice(2).toLowerCase().padStart(64, "0");
-        const data = "0x70a08231" + paddedAddress;
-        const raw = await provider.request({ method: "eth_call", params: [{ to: tokenAddress, data }, "latest"] }) as string;
-        const tokenUnits = BigInt(raw);
-        let decimals = 6;
-        try {
-          const rawDecimals = await provider.request({ method: "eth_call", params: [{ to: tokenAddress, data: "0x313ce567" }, "latest"] }) as string;
-          const parsedDecimals = Number(BigInt(rawDecimals));
-          if (Number.isInteger(parsedDecimals) && parsedDecimals >= 0 && parsedDecimals <= 18) decimals = parsedDecimals;
-        } catch { /* use the conventional USDC precision only when the configured token omits decimals */ }
-        const divisor = 10n ** BigInt(decimals);
-        usdc = (Number(tokenUnits / (divisor / (10n ** BigInt(Math.min(decimals, 6))))) / (10 ** Math.min(decimals, 6))).toLocaleString(undefined, { maximumFractionDigits: 6 });
-      }
+      const raw = await provider.request({ method: "eth_getBalance", params: [account, "latest"] }) as string;
+      const wei = BigInt(raw);
+      const whole = wei / 1000000000000000000n;
+      const fractional = (wei % 1000000000000000000n) / 1000000000000n;
+      const fractionalText = fractional.toString().padStart(6, "0").replace(/0+$/, "");
+      const balance = Number(whole).toLocaleString() + (fractionalText ? "." + fractionalText : "");
       setWalletChainId(chainId);
-      setWalletBalances({ native: nativeBalance, usdc, status: tokenAddress ? "Live on-chain reads · Arc Testnet" : "Live native balance · USDC contract not configured", updatedAt: Date.now() });
+      setWalletBalances({ native: balance, status: "Live native USDC balance · Arc Testnet", updatedAt: Date.now() });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Balance read failed.";
-      setWalletBalances({ native: null, usdc: null, status: "Could not read balance: " + message, updatedAt: null });
-    } finally {
-      setBalanceBusy(false);
-    }
+      setWalletBalances({ native: null, status: "Could not read balance: " + (error instanceof Error ? error.message : "request failed"), updatedAt: null });
+    } finally { setBalanceBusy(false); }
+  }
+
+  async function estimatePaymentFee() {
+    if (!intent) return;
+    const provider = window.ethereum;
+    if (!provider || !walletAddress) { setNotice("Connect a wallet before estimating a transaction fee."); return; }
+    if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient is not a wallet address. Resolve it before estimating fees."); return; }
+    if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only."); return; }
+    const match = intent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
+    if (!match || BigInt(match[1]) <= 0n) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
+    const units6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
+    const value = "0x" + (units6 * 1000000000000n).toString(16);
+    setBalanceBusy(true);
+    setNotice("Estimating gas on Arc Testnet. No transaction will be sent.");
+    try {
+      const chain = await provider.request({ method: "eth_chainId" }) as string;
+      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Switch the wallet to Arc Testnet before estimating this payment."); return; }
+      const accounts = await provider.request({ method: "eth_accounts" }) as string[];
+      const from = accounts?.[0];
+      if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before estimating."); return; }
+      const gasHex = await provider.request({ method: "eth_estimateGas", params: [{ from, to: intent.recipient, value }, "latest"] }) as string;
+      const priceHex = await provider.request({ method: "eth_gasPrice" }) as string;
+      const feeWei = BigInt(gasHex) * BigInt(priceHex);
+      const feeWhole = feeWei / 1000000000000000000n;
+      const feeFraction = (feeWei % 1000000000000000000n) / 1000000000000n;
+      const fee = Number(feeWhole) + Number(feeFraction) / 1000000;
+      const label = fee.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC (estimated)";
+      setIntent(current => current ? { ...current, feeEstimate: label } : current);
+      setNotice("Fee estimate received from Arc Testnet. This is an estimate, not a guarantee. Nothing was signed or sent.");
+    } catch (error) { setNotice("Could not estimate fee: " + (error instanceof Error ? error.message : "request failed") + ". No transaction was sent."); }
+    finally { setBalanceBusy(false); }
   }
 
   function disconnectWalletView() {
     setWalletAddress(null);
     setWalletChainId(null);
-    setWalletBalances({ native: null, usdc: null, status: "Not connected", updatedAt: null });
+    setWalletBalances({ native: null, status: "Not connected", updatedAt: null });
     setNotice("Wallet disconnected from this Sonus view. To revoke site access completely, manage connected sites in your wallet.");
   }
 
@@ -300,7 +326,7 @@ export default function SonusWorkspace() {
                 <div className="ws-panel-top"><span>TOTAL PORTFOLIO VALUE</span><button onClick={() => setBalanceVisible(v => !v)} aria-label={balanceVisible ? "Hide balance" : "Show balance"}>{balanceVisible ? <Eye size={16} /> : <EyeOff size={16} />}</button></div>
                 <div className="ws-balance-number">{balanceVisible ? "$24,680" : "••••••"}<span>.52</span><span className="ws-balance-usd"> USD</span></div>
                 <div className="ws-balance-change"><span><TrendingUp size={14} /> +$1,284.30 (5.49%)</span><small>Past 30 days · illustrative</small></div>
-                {walletAddress && <div className="ws-chain-balance"><div><span>ARC TESTNET NATIVE BALANCE</span><strong>{walletBalances.native === null ? "—" : walletBalances.native + " ARC"}</strong></div><div><span>USDC BALANCE</span><strong>{walletBalances.usdc === null ? "Not configured" : walletBalances.usdc + " USDC"}</strong></div><button onClick={refreshWalletBalances} disabled={balanceBusy}>{balanceBusy ? "Reading…" : "Refresh on-chain balances"} <ArrowRight size={12} /></button><small>{walletBalances.status}{walletBalances.updatedAt ? " · " + new Date(walletBalances.updatedAt).toLocaleTimeString() : ""}</small></div>}
+                {walletAddress && <div className="ws-chain-balance"><div><span>ARC TESTNET NATIVE USDC</span><strong>{walletBalances.native === null ? "—" : walletBalances.native + " USDC"}</strong></div><button onClick={walletChainId === ARC_TESTNET_CHAIN_ID ? refreshWalletBalances : switchToArcTestnet} disabled={balanceBusy}>{balanceBusy ? "Reading…" : walletChainId === ARC_TESTNET_CHAIN_ID ? "Refresh live balance" : "Switch to Arc Testnet"} <ArrowRight size={12} /></button><small>{walletBalances.status}{walletBalances.updatedAt ? " · " + new Date(walletBalances.updatedAt).toLocaleTimeString() : ""}</small></div>}
                 <div className="ws-chart" aria-label="Illustrative portfolio performance chart">
                   <div className="ws-chart-grid"><i /><i /><i /><i /></div>
                   <svg viewBox="0 0 720 135" preserveAspectRatio="none" role="img" aria-label="Illustrative upward portfolio line"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#a8d7c4" stopOpacity=".2" /><stop offset="100%" stopColor="#a8d7c4" stopOpacity="0" /></linearGradient></defs><path d="M0 108 C24 104 32 88 52 93 S87 108 108 86 S139 75 160 82 S187 55 210 66 S245 83 266 58 S301 70 323 52 S359 68 380 41 S418 58 439 45 S471 60 495 35 S529 47 548 29 S581 49 603 22 S642 38 661 17 S696 23 720 7 L720 135 L0 135Z" fill="url(#chartFill)" /><path d="M0 108 C24 104 32 88 52 93 S87 108 108 86 S139 75 160 82 S187 55 210 66 S245 83 266 58 S301 70 323 52 S359 68 380 41 S418 58 439 45 S471 60 495 35 S529 47 548 29 S581 49 603 22 S642 38 661 17 S696 23 720 7" fill="none" stroke="#a8d7c4" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg>
@@ -336,7 +362,7 @@ export default function SonusWorkspace() {
             <section className="ws-assistant-panel" id="ws-assistant">
               <div className="ws-assistant-heading"><div className="ws-assistant-symbol"><AudioLines size={19} /></div><div><span className="ws-eyebrow">YOUR PAYMENT INTELLIGENCE</span><h2>Ask Sonus<span className="ws-period">.</span></h2><p>Type it or say it. Start with what you want to do.</p></div><span className="ws-assistant-beta">PREVIEW</span></div>
               <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}</div>
-              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? "Address format only · not verified" : "Unresolved name · address required"}</small></div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div></div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> This is a draft only. Selecting a network does not verify the recipient or check token availability. No transaction can be signed or sent from this preview.</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("No transaction was sent. Wallet execution is not enabled in this preview."); setIntent(null); }}>Dismiss draft</button><button onClick={() => setNotice(!EVM_ADDRESS_RE.test(intent.recipient) ? "Recipient is unresolved. Enter a wallet address or integrate a trusted name-resolution service before proceeding." : intent.network === "Choose network" ? "Choose a network before reviewing this payment." : "Draft checks are incomplete: live balance, token contract, fees, simulation, and wallet transaction signing are not integrated. Nothing was sent.")}>Validate draft <ArrowRight size={13} /></button></div></div>}
+              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? "Address format only · not verified" : "Unresolved name · address required"}</small></div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> This is a draft only. Selecting a network does not verify the recipient or check token availability. No transaction can be signed or sent from this preview.</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("No transaction was sent. Wallet execution is not enabled in this preview."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }}>{balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button></div></div>}
               <div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
               <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim()}><Send size={16} /></button></form>
               <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
