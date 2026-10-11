@@ -158,6 +158,7 @@ GitHub Actions runs typecheck, lint, and production build checks. Check the work
 
 Manual checks for the latest payment-control changes:
 - Rapidly click Send twice and verify only one wallet approval attempt opens.
+- While the review confirmation is open, switch the wallet account or network; Sonus should recheck immediately before submission and stop without sending.
 - Send malformed preflight bodies (`null`, `[]`, invalid JSON, and oversized JSON) and verify they return a controlled 400/413 response rather than a server error.
 - Test both guardrails independently: amount caps enabled with saved-recipient disabled, then saved-recipient enabled with amount caps disabled.
 - Confirm policy status in Settings and verify the payment review dialog describes the active local rules.
