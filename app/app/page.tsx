@@ -7,7 +7,7 @@ import {
   Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command,
   Copy, ExternalLink, Eye, EyeOff, Globe2, History, LayoutDashboard,
   LockKeyhole, Mic, MoreHorizontal, Plus, Search, Send, Settings2,
-  ShieldCheck, Sparkles, TrendingDown, TrendingUp, Wallet, X, Zap
+  ShieldCheck, Sparkles, TrendingDown, TrendingUp, Wallet, X, Zap, RefreshCw
 } from "lucide-react";
 
 type Message = { role: "assistant" | "user"; text: string };
@@ -95,6 +95,7 @@ export default function SonusWorkspace() {
   const [marketLoading, setMarketLoading] = useState(true);
   const [marketError, setMarketError] = useState("");
   const [marketUpdatedAt, setMarketUpdatedAt] = useState<string | null>(null);
+  const [marketRefreshNonce, setMarketRefreshNonce] = useState(0);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
 
   const marketRows = markets.map(asset => {
@@ -111,6 +112,7 @@ export default function SonusWorkspace() {
     let active = true;
     let requestController: AbortController | null = null;
     const loadMarket = async () => {
+      setMarketLoading(true);
       requestController?.abort();
       requestController = new AbortController();
       try {
@@ -137,7 +139,7 @@ export default function SonusWorkspace() {
       requestController?.abort();
       window.clearInterval(timer);
     };
-  }, []);
+  }, [marketRefreshNonce]);
 
   useEffect(() => {
     const provider = window.ethereum;
@@ -503,7 +505,7 @@ export default function SonusWorkspace() {
 
             <div className="ws-lower-grid">
               <section className="ws-market-panel">
-                <div className="ws-section-heading"><div><h2>Market watch</h2><p>A quick read on selected assets</p></div><button className="ws-view-link" onClick={() => navigate("Intelligence")}>View intelligence <ArrowRight size={14} /></button></div>
+                <div className="ws-section-heading"><div><h2>Market watch</h2><p>A quick read on selected assets</p></div><div className="ws-section-actions"><button className="ws-view-link" onClick={() => setMarketRefreshNonce(value => value + 1)} disabled={marketLoading} aria-label="Refresh live market data"><RefreshCw size={13} /> Refresh</button><button className="ws-view-link" onClick={() => navigate("Intelligence")}>View intelligence <ArrowRight size={14} /></button></div></div>
                 <div className="ws-market-table"><div className="ws-table-head"><span>ASSET</span><span>PRICE</span><span>24H</span><span /></div>{marketRows.map(asset => <div className="ws-market-row" key={asset.symbol}><span className={"ws-coin ws-coin-" + asset.symbol.toLowerCase()}>{asset.mark}</span><div className="ws-asset-name"><strong>{asset.symbol}</strong><small>{asset.name}</small></div><strong className="ws-asset-price">{asset.price}</strong><span className={asset.up ? "ws-change up" : "ws-change down"}>{asset.up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{asset.change}</span><button className="ws-row-more" aria-label={"More about " + asset.symbol} onClick={() => { setInput("Give me a quick crypto market overview"); document.getElementById("ws-assistant-input")?.focus(); }}><ArrowUpRight size={14} /></button></div>)}</div>
                 <p className="ws-data-disclaimer"><Activity size={12} /> {marketError ? marketError + " Market prices are not available." : marketLoading ? "Loading live market quotes…" : "Live prices from CoinGecko · refreshes every 60 seconds."}{marketUpdatedAt && !marketError ? " Updated " + new Date(marketUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + "." : ""}</p>
               </section>
