@@ -71,9 +71,9 @@ function localFallback(message: string): AssistantOutput {
   const isTransfer = /\b(send|pay|transfer)\b/i.test(text);
   if (isTransfer) {
     const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|btc|usd)?/i);
-    const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
+    const recipientMatch = text.match(/\bto\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
     const amount = amountMatch?.[1]?.startsWith(".") ? "0" + amountMatch[1] : amountMatch?.[1] ?? null;
-    const asset = (amountMatch?.[2] || "USDC").toUpperCase();
+    const asset = (amountMatch?.[2] || "").toUpperCase();
     const recipient = recipientMatch?.[1] ?? null;
     const validAmount = amount !== null && Number.isFinite(Number(amount)) && Number(amount) > 0;
     const validAsset = ASSETS.has(asset);
