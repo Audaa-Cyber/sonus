@@ -65,3 +65,17 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 ## Verification
 
 GitHub Actions runs typecheck, lint, and production build checks. Check the workflow status on the [Sonus checks page](https://github.com/Audaa-Cyber/sonus/actions/workflows/ci.yml).
+
+
+### Manual Arc Testnet smoke test
+
+1. Open the workspace in a desktop browser with an EVM wallet extension.
+2. Connect a wallet and use the network control to add/switch to Arc Testnet.
+3. If you need test funds, use the [Circle testnet faucet](https://faucet.circle.com). Never use a mainnet wallet balance for this test.
+4. Refresh the live native USDC balance.
+5. Ask Sonus to prepare a payment to a wallet address you control on Arc Testnet, for example `Send 0.01 USDC to 0x<your-test-wallet-address>`.
+6. Select **Arc Testnet**, then choose **Estimate fee**. Confirm the estimated fee and balance warning.
+7. Only if you intentionally want to test a transfer, choose **Send test payment**, verify the sender, recipient, amount, and fee in Sonus, then verify the same details again in the wallet popup.
+8. Follow the transaction status and verify the result on [Arcscan Testnet](https://testnet.arcscan.app).
+
+Use a test wallet and testnet funds only. A valid address format does not prove that the address belongs to the intended recipient.
