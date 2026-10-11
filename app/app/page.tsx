@@ -12,7 +12,7 @@ import {
 type Message = { role: "assistant" | "user"; text: string };
 type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string };
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
-const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL", "USD"]);
+const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
 declare global { interface Window { ethereum?: Eip1193Provider } }
 const ARC_TESTNET_CHAIN_ID = 5042002;
@@ -47,7 +47,7 @@ function buildReply(input: string): { reply: string; intent?: Intent } {
     const amount = amountMatch?.[1] || "";
     const recipient = recipientMatch?.[1] || "";
     if (!amount || !recipient || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !SUPPORTED_DRAFT_ASSETS.has(asset)) {
-      return { reply: "I can help prepare that, but I need a valid positive amount, a supported asset (USDC, USDT, ETH, SOL, or USD), and a recipient. For example: “Send 25 USDC to Alex for lunch.” USD is a note only, not a transferable token." };
+      return { reply: "I can help prepare that, but I need a valid positive amount, a supported token (USDC, USDT, ETH, or SOL), and a recipient. For example: “Send 25 USDC to Alex for lunch.”" };
     }
     const reasonMatch = text.match(/\bfor\s+(.+)$/i);
     return {
