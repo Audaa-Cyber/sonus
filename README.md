@@ -79,6 +79,7 @@ Manual cases to verify locally:
 - Export JSON and confirm it contains the current local records and notes; no request should be sent to a server.
 - Ask about recent payments or a saved payment note and verify the answer is based only on local Sonus records; the assistant API should not be called for these memory questions.
 - Enable spending guardrails, set a per-payment limit below the draft amount, and verify Sonus blocks before opening the wallet confirmation; then test a daily cap against recorded same-sender transactions.
+- Connect the intended wallet and verify Settings shows the recorded UTC-day total for that sender; failed records should not count toward the displayed total.
 
 ## Saved recipient address book
 
