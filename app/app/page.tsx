@@ -305,6 +305,20 @@ export default function SonusWorkspace() {
       const accounts = await provider.request({ method: "eth_accounts" }) as string[];
       const from = accounts?.[0];
       if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before sending."); return; }
+      const preflightResponse = await fetch("/api/risk/preflight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender: from, recipient: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, chainId: Number.parseInt(chain, 16) }),
+        cache: "no-store",
+      });
+      if (!preflightResponse.ok) { setNotice("Transaction preflight is unavailable. No transaction was sent; try again later."); return; }
+      const preflight = await preflightResponse.json() as { status: string; allowedToContinue: boolean; checks?: { severity: string; message: string }[]; disclaimer?: string };
+      if (!preflight.allowedToContinue) {
+        const blocking = (preflight.checks || []).filter(check => check.severity === "block").map(check => check.message);
+        setNotice("Preflight blocked this payment: " + blocking.join(" "));
+        return;
+      }
+      const warnings = (preflight.checks || []).filter(check => check.severity === "warning").map(check => check.message);
       if (from.toLowerCase() === intent.recipient.toLowerCase()) { setNotice("Recipient and sender are the same wallet. Check the address before proceeding."); return; }
       const gasHex = await provider.request({ method: "eth_estimateGas", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16) }, "latest"] }) as string;
       const gasLimit = (BigInt(gasHex) * 120n + 99n) / 100n;
@@ -319,7 +333,8 @@ export default function SonusWorkspace() {
       const feeFraction = (feeWei % 1000000000000000000n) / 1000000000000n;
       const fee = (Number(feeWhole) + Number(feeFraction) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const amountLabel = intent.amount + " USDC";
-      const confirmed = window.confirm("Review Arc Testnet payment\n\nFrom: " + from + "\nTo: " + intent.recipient + "\nAmount: " + amountLabel + "\nEstimated network fee: " + fee + " USDC\n\nThis will open your wallet for final approval. Only approve if these details are correct.");
+      const warningText = warnings.length ? "\n\nPreflight warnings:\n• " + warnings.join("\n• ") : "";
+      const confirmed = window.confirm("Review Arc Testnet payment\n\nFrom: " + from + "\nTo: " + intent.recipient + "\nAmount: " + amountLabel + "\nEstimated network fee: " + fee + " USDC" + warningText + "\n\nBasic parameter checks only; no phishing scanner or transaction simulation is connected. This will open your wallet for final approval. Only approve if these details are correct.");
       if (!confirmed) { setNotice("Payment cancelled before opening the wallet. Nothing was sent."); return; }
       const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16), gas: "0x" + gasLimit.toString(16) }] }) as string;
       if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) throw new Error("Wallet returned an invalid transaction hash.");
