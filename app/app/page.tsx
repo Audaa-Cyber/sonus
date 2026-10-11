@@ -24,11 +24,17 @@ declare global { interface Window { ethereum?: Eip1193Provider } }
 const ARC_TESTNET_CHAIN_ID = 5042002;
 
 const markets = [
-  { symbol: "ETH", name: "Ethereum", price: "$3,842.19", change: "+2.84%", up: true, mark: "Ξ" },
-  { symbol: "SOL", name: "Solana", price: "$182.46", change: "+5.21%", up: true, mark: "◎" },
-  { symbol: "BTC", name: "Bitcoin", price: "$108,420.00", change: "-0.74%", up: false, mark: "₿" },
-  { symbol: "USDC", name: "USD Coin", price: "$1.00", change: "0.01%", up: true, mark: "$" },
+  { symbol: "ETH", name: "Ethereum", mark: "Ξ" },
+  { symbol: "SOL", name: "Solana", mark: "◎" },
+  { symbol: "BTC", name: "Bitcoin", mark: "₿" },
+  { symbol: "USDC", name: "USD Coin", mark: "$" },
 ];
+type MarketQuote = { symbol: string; name: string; priceUsd: number; change24h: number };
+type MarketApiResponse = { assets?: MarketQuote[]; source?: string; updatedAt?: string; error?: string };
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: value >= 100 ? 2 : value >= 1 ? 4 : 6 }).format(value);
+}
 
 const activity = [
   { icon: ArrowUpRight, title: "Sent to Maya", detail: "Today, 10:42 AM · Arc", amount: "− 125.00 USDC", kind: "sent" },
@@ -85,7 +91,51 @@ export default function SonusWorkspace() {
   const [paymentTx, setPaymentTx] = useState<PaymentTx | null>(null);
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [walletBalances, setWalletBalances] = useState<WalletBalances>({ native: null, status: "Not loaded", updatedAt: null });
+  const [marketQuotes, setMarketQuotes] = useState<MarketQuote[]>([]);
+  const [marketLoading, setMarketLoading] = useState(true);
+  const [marketError, setMarketError] = useState("");
+  const [marketUpdatedAt, setMarketUpdatedAt] = useState<string | null>(null);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
+
+  const marketRows = markets.map(asset => {
+    const quote = marketQuotes.find(item => item.symbol === asset.symbol);
+    return {
+      ...asset,
+      price: quote ? formatUsd(quote.priceUsd) : marketLoading ? "Loading…" : "Unavailable",
+      change: quote ? (quote.change24h > 0 ? "+" : "") + quote.change24h.toFixed(2) + "%" : "—",
+      up: quote ? quote.change24h >= 0 : true
+    };
+  });
+
+  useEffect(() => {
+    let active = true;
+    let requestController: AbortController | null = null;
+    const loadMarket = async () => {
+      requestController?.abort();
+      requestController = new AbortController();
+      try {
+        const response = await fetch("/api/market", { signal: requestController.signal, cache: "no-store" });
+        const data = await response.json() as MarketApiResponse;
+        if (!response.ok || !Array.isArray(data.assets)) throw new Error(data.error || "Market data is unavailable.");
+        if (!active) return;
+        setMarketQuotes(data.assets.filter(item => Number.isFinite(item.priceUsd) && Number.isFinite(item.change24h)));
+        setMarketUpdatedAt(data.updatedAt || new Date().toISOString());
+        setMarketError("");
+      } catch (error) {
+        if (!active || (error instanceof Error && error.name === "AbortError")) return;
+        setMarketError(error instanceof Error ? error.message : "Market data is unavailable.");
+      } finally {
+        if (active) setMarketLoading(false);
+      }
+    };
+    void loadMarket();
+    const timer = window.setInterval(loadMarket, 60_000);
+    return () => {
+      active = false;
+      requestController?.abort();
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const provider = window.ethereum;
@@ -452,8 +502,8 @@ export default function SonusWorkspace() {
             <div className="ws-lower-grid">
               <section className="ws-market-panel">
                 <div className="ws-section-heading"><div><h2>Market watch</h2><p>A quick read on selected assets</p></div><button className="ws-view-link" onClick={() => navigate("Intelligence")}>View intelligence <ArrowRight size={14} /></button></div>
-                <div className="ws-market-table"><div className="ws-table-head"><span>ASSET</span><span>PRICE</span><span>24H</span><span /></div>{markets.map(asset => <div className="ws-market-row" key={asset.symbol}><span className={"ws-coin ws-coin-" + asset.symbol.toLowerCase()}>{asset.mark}</span><div className="ws-asset-name"><strong>{asset.symbol}</strong><small>{asset.name}</small></div><strong className="ws-asset-price">{asset.price}</strong><span className={asset.up ? "ws-change up" : "ws-change down"}>{asset.up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{asset.change}</span><button className="ws-row-more" aria-label={"More about " + asset.symbol} onClick={() => { setInput("Give me a quick crypto market overview"); document.getElementById("ws-assistant-input")?.focus(); }}><ArrowUpRight size={14} /></button></div>)}</div>
-                <p className="ws-data-disclaimer"><Activity size={12} /> Illustrative data for UI preview. Prices and portfolio values are not live.</p>
+                <div className="ws-market-table"><div className="ws-table-head"><span>ASSET</span><span>PRICE</span><span>24H</span><span /></div>{marketRows.map(asset => <div className="ws-market-row" key={asset.symbol}><span className={"ws-coin ws-coin-" + asset.symbol.toLowerCase()}>{asset.mark}</span><div className="ws-asset-name"><strong>{asset.symbol}</strong><small>{asset.name}</small></div><strong className="ws-asset-price">{asset.price}</strong><span className={asset.up ? "ws-change up" : "ws-change down"}>{asset.up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{asset.change}</span><button className="ws-row-more" aria-label={"More about " + asset.symbol} onClick={() => { setInput("Give me a quick crypto market overview"); document.getElementById("ws-assistant-input")?.focus(); }}><ArrowUpRight size={14} /></button></div>)}</div>
+                <p className="ws-data-disclaimer"><Activity size={12} /> {marketError ? marketError + " Market prices are not available." : marketLoading ? "Loading live market quotes…" : "Live prices from CoinGecko · refreshes every 60 seconds."}{marketUpdatedAt && !marketError ? " Updated " + new Date(marketUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + "." : ""}</p>
               </section>
 
               <section className="ws-activity-panel">
