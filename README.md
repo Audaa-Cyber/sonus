@@ -55,11 +55,11 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 
 ### Current limitations
 
-- No transaction is signed or sent by Sonus yet.
-- Fee estimation is currently limited to native USDC transfers on Arc Testnet.
+- A wallet-approved native USDC transfer can be submitted on Arc Testnet after an in-page review and the wallet's own confirmation. Sonus does not receive or store private keys. This path is testnet-only.
+- Fee estimation and submission are currently limited to native USDC transfers on Arc Testnet.
 - Recipient names are not resolved. Users must supply a wallet address; an address-format match does not verify who controls it.
 - The dashboard's portfolio chart, market prices, and activity examples are illustrative, not live.
-- A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review.
+- A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
 - This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
 
 ## Verification
