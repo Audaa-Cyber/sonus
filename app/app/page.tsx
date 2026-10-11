@@ -185,6 +185,8 @@ export default function SonusWorkspace() {
 
   useEffect(() => {
     if (!spendingRulesReady) return;
+    const validLimit = (value: string) => /^\d+(?:\.\d{1,6})?$/.test(value) && Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1000000000;
+    if (!validLimit(spendingRules.maxSingleUsdc) || !validLimit(spendingRules.dailyCapUsdc)) return;
     try {
       window.localStorage.setItem("sonus:spending-rules:v1", JSON.stringify(spendingRules));
     } catch {
