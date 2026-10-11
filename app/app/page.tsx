@@ -24,7 +24,6 @@ type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | 
 type SpeechRecognitionLike = { lang: string; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type SpeechWindow = Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
-declare global { interface Window { ethereum?: Eip1193Provider } }
 const ARC_TESTNET_CHAIN_ID = 5042002;
 
 const markets = [
