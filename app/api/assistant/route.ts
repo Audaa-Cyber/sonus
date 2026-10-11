@@ -230,7 +230,7 @@ export async function POST(request: Request) {
   try {
     const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
     const model = process.env.SONUS_AI_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";
-    const baseUrl = configuredBaseUrl.trim().replace(/\\/+$/, "").replace(/\\/(?:chat\\/completions|responses)$/i, "");
+    const baseUrl = configuredBaseUrl.trim().replace(/\/+$/, "").replace(/\/(?:chat\/completions|responses)$/i, "");
     let parsedBaseUrl: URL;
     try {
       parsedBaseUrl = new URL(baseUrl);
@@ -255,7 +255,7 @@ export async function POST(request: Request) {
       "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise.",
       "Return a single valid JSON object with keys reply and intent. The intent must contain action, amount, asset, recipient, chain, purpose, needsClarification, and clarificationQuestion. Use null for unknown optional values. Do not wrap the JSON in markdown.",
       "Follow this output schema: " + JSON.stringify(schema)
-    ].join("\\n");
+    ].join("\n");
     const upstream = await fetch(endpoint, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
@@ -294,7 +294,7 @@ export async function POST(request: Request) {
     const outputText = typeof rawContent === "string"
       ? rawContent
       : Array.isArray(rawContent)
-        ? rawContent.flatMap(part => typeof part.text === "string" ? [part.text] : []).join("\\n")
+        ? rawContent.flatMap(part => typeof part.text === "string" ? [part.text] : []).join("\n")
         : "";
     if (!outputText) throw new Error("The provider returned no assistant text. Check that the selected model supports chat completions.");
     const parsed = bindIntentToUserText(validateOutput(JSON.parse(outputText)), message);
