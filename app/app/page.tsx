@@ -308,7 +308,7 @@ export default function SonusWorkspace() {
       });
       const data = await response.json() as {
         reply?: string;
-        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null };
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
         mode?: "ai" | "fallback";
         error?: string;
       };
@@ -325,7 +325,7 @@ export default function SonusWorkspace() {
         });
         setPaymentTx(null);
       } else if (parsed?.action === "transfer" && (parsed.amount || parsed.recipient)) {
-        setNotice("Sonus identified a possible transfer, but the draft is incomplete. Check the message and provide a valid amount, asset, recipient, and network.");
+        setNotice(parsed.clarificationQuestion || "Sonus identified a possible transfer, but the draft is incomplete. Provide a valid amount, asset, recipient, and network.");
       }
       if (data.mode === "fallback") setNotice("AI mode is not configured yet. Sonus used its local assistant fallback; responses are limited.");
     } catch (error) {
