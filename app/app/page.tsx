@@ -539,6 +539,32 @@ export default function SonusWorkspace() {
     setActive("Overview");
     setAssistantBusy(true);
     setMessages(current => [...current, { role: "user", text: clean }]);
+
+    const isLocalMemoryQuestion = /\b(?:payment history|transaction history|recent payments|recent transactions|show me my payments|list my transactions|what did i (?:pay|send)|what was (?:that|the|my) payment for|why did i pay|find (?:my )?(?:payment|transaction))\b/i.test(clean);
+    if (isLocalMemoryQuestion) {
+      const amountMatch = clean.match(/\b(\d+(?:\.\d+)?)\s*(USDC|USDT|ETH|SOL)?\b/i);
+      const queryTerms = clean.toLowerCase().match(/[a-z0-9]{3,}/g)?.filter(term => !["what", "did", "pay", "send", "was", "that", "the", "for", "why", "show", "list", "find", "recent", "payments", "payment", "transactions", "transaction", "history", "mine", "my"].includes(term) && !["usdc", "usdt", "eth", "sol"].includes(term)) || [];
+      let matches = [...transactionHistory];
+      if (amountMatch) {
+        matches = matches.filter(item => Number(item.amount) === Number(amountMatch[1]) && (!amountMatch[2] || item.asset.toLowerCase() === amountMatch[2].toLowerCase()));
+      } else if (queryTerms.length) {
+        matches = matches.filter(item => queryTerms.some(term => (item.note || "").toLowerCase().includes(term)));
+      } else if (/recent|history|show me|list/i.test(clean)) {
+        matches = matches.slice(0, 3);
+      } else {
+        matches = matches.filter(item => Boolean(item.note));
+      }
+      const answer = matches.length
+        ? "I found these matching records in this browser's Sonus history:\n\n" + matches.slice(0, 3).map(item => "• " + item.amount + " " + item.asset + " to " + item.to.slice(0, 10) + "…" + item.to.slice(-6) + " · " + item.status + " · " + new Date(item.createdAt).toLocaleDateString() + "\n  Note: " + (item.note?.trim() || "No personal note saved.") + "\n  Hash: " + item.hash.slice(0, 12) + "…").join("\n\n") + (matches.length > 3 ? "\n\nShowing 3 of " + matches.length + " matches. Open Activity to search the full local list." : "")
+        : transactionHistory.length
+          ? "I couldn't find a matching transaction note in this browser's Sonus history. Try a payment amount or a word from its note, or open Activity to search your saved records. Sonus only knows transactions submitted through this browser; this isn't your complete wallet history."
+          : "There are no Sonus transaction records in this browser yet. After a wallet-approved Arc Testnet payment is recorded, you can add a note in Activity and ask me about it here.";
+      setMessages(current => [...current, { role: "assistant", text: answer }]);
+      setAssistantBusy(false);
+      setNotice("Answered from browser-local transaction memory. Transaction records and notes were not sent to the assistant API.");
+      return;
+    }
+
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
