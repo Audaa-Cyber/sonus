@@ -183,7 +183,7 @@ export async function POST(request: Request) {
   if (!message) return NextResponse.json({ error: "Write a message first." }, { status: 400 });
   if (message.length > 2000) return NextResponse.json({ error: "Message is too long. Keep it under 2,000 characters." }, { status: 413 });
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.SONUS_AI_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
     const fallback = localFallback(message);
     if (fallback.intent.action === "market") {
@@ -228,49 +228,74 @@ export async function POST(request: Request) {
   };
 
   try {
-    const upstream = await fetch("https://api.openai.com/v1/responses", {
+    const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+    const model = process.env.SONUS_AI_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";
+    const baseUrl = configuredBaseUrl.trim().replace(/\\/+$/, "").replace(/\\/(?:chat\\/completions|responses)$/i, "");
+    let parsedBaseUrl: URL;
+    try {
+      parsedBaseUrl = new URL(baseUrl);
+    } catch {
+      return NextResponse.json({ error: "AI provider base URL is invalid. Set SONUS_AI_BASE_URL to the provider's API root, such as https://api.openai.com/v1." }, { status: 500 });
+    }
+    if (!["https:", "http:"].includes(parsedBaseUrl.protocol) || (parsedBaseUrl.protocol === "http:" && !["localhost", "127.0.0.1", "::1"].includes(parsedBaseUrl.hostname))) {
+      return NextResponse.json({ error: "AI provider base URL must use HTTPS, except for localhost development." }, { status: 500 });
+    }
+    const endpoint = baseUrl + "/chat/completions";
+    const systemPrompt = [
+      "You are Sonus, a careful crypto payment-intelligence assistant.",
+      "Help the user clarify intent and plan safe actions. You cannot execute transactions or access a wallet.",
+      "Never claim a payment was sent, a balance was checked, a price is current, a quote was obtained, or a transaction was simulated.",
+      "Do not treat a name or handle as a resolved wallet address. Never infer a recipient address.",
+      "A valid EVM address string does not verify ownership or destination correctness.",
+      "For transfers, extract only details explicitly stated. If amount, asset, recipient, or network is missing or ambiguous, set needsClarification=true and ask a concise question.",
+      "Only use action transfer when the user clearly requests sending, paying, or transferring. Never convert advice or hypotheticals into an execution request.",
+      "Allowed assets: USDC, USDT, ETH, SOL, BTC. Allowed chain values: Arc Testnet, Ethereum, Arbitrum, Base, Solana, unknown. Use unknown when not explicitly clear.",
+      "Sonus currently supports only native USDC transfers on Arc Testnet. Other assets and chains may be discussed or drafted but must never be represented as executable.",
+      "Full portfolio balances, swaps, bridges, staking, and external identity resolution are not connected. Never claim a provider is selected, a quote exists, or a route is available. Never silently use a third-party swap provider.",
+      "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise.",
+      "Return a single valid JSON object with keys reply and intent. The intent must contain action, amount, asset, recipient, chain, purpose, needsClarification, and clarificationQuestion. Use null for unknown optional values. Do not wrap the JSON in markdown."
+    ].join("\\n");
+    const upstream = await fetch(endpoint, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(25000),
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+      signal: AbortSignal.timeout(25_000),
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-        store: false,
-        instructions: [
-          "You are Sonus, a careful crypto payment-intelligence assistant.",
-          "Help the user clarify intent and plan safe actions. You cannot execute transactions or access a wallet.",
-          "Never claim a payment was sent, a balance was checked, a price is current, a quote was obtained, or a transaction was simulated.",
-          "Do not treat a name or handle as a resolved wallet address. Never infer a recipient address.",
-          "A valid EVM address string does not verify ownership or destination correctness.",
-          "For transfers, extract only details explicitly stated. If amount, asset, recipient, or network is missing or ambiguous, set needsClarification=true and ask a concise question.",
-          "Only use action transfer when the user clearly requests sending, paying, or transferring. Never convert advice or hypotheticals into an execution request.",
-          "Allowed assets: USDC, USDT, ETH, SOL, BTC. Allowed chain values: Arc Testnet, Ethereum, Arbitrum, Base, Solana, unknown. Use unknown when not explicitly clear.",
-          "Sonus currently supports only native USDC transfers on Arc Testnet. Other assets and chains may be discussed or drafted but must never be represented as executable.",
-          "Full portfolio balances, swaps, bridges, staking, and external identity resolution are not connected. Sonus is investigating an Arc/Circle first-party swap path, but a supported public same-chain swap API has not been verified; do not claim a provider is selected, a quote exists, or a route is available. Never silently use a third-party swap provider. For market requests, the server may append a live CoinGecko price snapshot only when the provider responds successfully.",
-          "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise."
-        ].join("\n"),
-        input: [
-          ...history.map((item) => ({ role: item.role, content: item.content })),
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...history,
           { role: "user", content: message }
         ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "sonus_assistant_response",
-            strict: true,
-            schema
-          }
-        },
-        max_output_tokens: 700
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+        max_tokens: 900
       })
     });
     if (!upstream.ok) {
       const detail = await upstream.text();
-      console.error("Sonus assistant provider error", upstream.status, detail.slice(0, 500));
-      return NextResponse.json({ error: upstream.status === 401 ? "AI provider key was rejected. Check OPENAI_API_KEY." : "AI provider request failed. Check server logs and provider availability." }, { status: 502 });
+      console.error("Sonus assistant provider error", { status: upstream.status, endpoint, model, detail: detail.slice(0, 500) });
+      const errorMessage = upstream.status === 401 || upstream.status === 403
+        ? "AI provider rejected the API key. Check SONUS_AI_API_KEY and the provider's key permissions."
+        : upstream.status === 404
+          ? "AI provider endpoint or model was not found. Check SONUS_AI_BASE_URL and SONUS_AI_MODEL."
+          : upstream.status === 400
+            ? "AI provider rejected the request. Confirm the model supports Chat Completions and JSON mode."
+            : upstream.status === 429
+              ? "AI provider rate limit or quota reached. Check your provider's usage and billing."
+              : "AI provider request failed. Check the provider status and server logs.";
+      return NextResponse.json({ error: errorMessage }, { status: 502 });
     }
-    const result = await upstream.json() as { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
-    const outputText = result.output?.flatMap(item => item.content ?? []).find(item => item.type === "output_text")?.text;
-    if (!outputText) throw new Error("No structured output was returned.");
+    const result = await upstream.json() as {
+      choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> | null } }>;
+      error?: { message?: string };
+    };
+    const rawContent = result.choices?.[0]?.message?.content;
+    const outputText = typeof rawContent === "string"
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent.flatMap(part => typeof part.text === "string" ? [part.text] : []).join("\\n")
+        : "";
+    if (!outputText) throw new Error("The provider returned no assistant text. Check that the selected model supports chat completions.");
     const parsed = bindIntentToUserText(validateOutput(JSON.parse(outputText)), message);
     if (parsed.intent.action === "market") {
       const marketSummary = await getLiveMarketSummary();
