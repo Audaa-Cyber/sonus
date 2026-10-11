@@ -28,3 +28,8 @@ test("reconciled states require a reconciliation timestamp and use an updated-at
   assert.match(migration, /status in \('submitted', 'pending'\) or reconciled_at is not null/i);
   assert.match(migration, /create trigger transaction_ledger_set_updated_at/i);
 });
+
+test("terminal receipt states require a valid block hash and block number", () => {
+  assert.match(migration, /transaction_ledger_block_hash_format check/i);
+  assert.match(migration, /status not in \(\x27confirmed\x27, \x27failed\x27\) or \(block_number is not null and block_hash is not null\)/i);
+});
