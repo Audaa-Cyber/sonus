@@ -41,6 +41,7 @@ Implemented in the workspace:
 - Native USDC fee estimate using `eth_estimateGas` and `eth_gasPrice` on Arc Testnet.
 - Basic comparison of the draft amount plus estimated fee against the wallet's current native balance.
 - Voice input through the browser's speech-recognition API where supported.
+- Local saved-recipient address book with name-to-address matching for explicitly saved contacts.
 
 ### Arc Testnet configuration
 
@@ -56,10 +57,14 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 
 - A wallet-approved native USDC transfer can be submitted on Arc Testnet after an in-page review and the wallet's own confirmation. Sonus does not receive or store private keys. This path is testnet-only.
 - Fee estimation and submission are currently limited to native USDC transfers on Arc Testnet.
-- Recipient names are not resolved. Users must supply a wallet address; an address-format match does not verify who controls it.
+- Saved recipient names can resolve to addresses explicitly saved in the current browser. This address book is local to that browser, is not synced, and does not verify real-world identity or address ownership. Unknown names still require a wallet address.
 - The dashboard's portfolio chart and activity examples are illustrative, not live. The Market Watch panel uses a separate live market-data endpoint when the provider is available.
 - A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
 - This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
+
+## Saved recipient address book
+
+The Overview workspace includes a small address book for EVM addresses. Contacts are stored in the current browser's `localStorage` under `sonus:contacts:v1`; they are not sent to Sonus servers or synced across devices. Payment requests can use an exact saved contact name, which is mapped locally to its stored address before the draft is shown. This is convenience-based name resolution only: it does not verify a person's identity or prove they control the address. Always confirm the full destination address before wallet approval. Do not use this local storage as a secure or shared contact database.
 
 ## Live market data
 
