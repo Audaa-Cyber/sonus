@@ -31,7 +31,7 @@ test("reconciled states require a reconciliation timestamp and use an updated-at
 
 test("terminal receipt states require a valid block hash and block number", () => {
   assert.match(migration, /transaction_ledger_block_hash_format check/i);
-  assert.match(migration, /status not in \(\x27confirmed\x27, \x27failed\x27\) or \(block_number is not null and block_hash is not null\)/i);
+  assert.match(migration, /status not in \('confirmed', 'failed'\) or \(block_number is not null and block_hash is not null\)/i);
 });
 
 test("receipt observations are append-only and scoped to the parent ledger owner", () => {
@@ -44,13 +44,13 @@ test("receipt observations are append-only and scoped to the parent ledger owner
 });
 
 test("migration contains one complete ledger definition with well-formed hash checks", () => {
-  assert.equal((migration.match(/create table if not exists public\\.transaction_ledger \\(/gi) || []).length, 1);
-  assert.equal((migration.match(/create table if not exists public\\.transaction_ledger_events \\(/gi) || []).length, 1);
-  assert.match(migration, /transaction_ledger_block_hash_format check \\(block_hash is null or lower\\(block_hash\\) ~ '\\^0x\\[a-f0-9\\]\\{64\\}\\$'\\)/i);
-  assert.doesNotMatch(migration, /lower\\(block_hash\\) ~ '\\^0x\\[a-f0-9\\]\\{64\\}\\s*constraint/i);
-  assert.doesNotMatch(migration, /^\\),\\s*$/m);
+  assert.equal((migration.match(/create table if not exists public\.transaction_ledger \(/gi) || []).length, 1);
+  assert.equal((migration.match(/create table if not exists public\.transaction_ledger_events \(/gi) || []).length, 1);
+  assert.match(migration, /transaction_ledger_block_hash_format check \(block_hash is null or lower\(block_hash\) ~ '\^0x\[a-f0-9\]\{64\}\$'\)/i);
+  assert.doesNotMatch(migration, /lower\(block_hash\) ~ '\^0x\[a-f0-9\]\{64\}\s*constraint/i);
+  assert.doesNotMatch(migration, /^\),\s*$/m);
 });
 
 test("confirmed and failed event observations require receipt block metadata", () => {
-  assert.match(migration, /transaction_ledger_events_terminal_receipt_required check \\([\\s\\S]*?status not in \\('confirmed', 'failed'\\) or \\(block_number is not null and block_hash is not null\\)/i);
+  assert.match(migration, /transaction_ledger_events_terminal_receipt_required check \([\s\S]*?status not in \('confirmed', 'failed'\) or \(block_number is not null and block_hash is not null\)/i);
 });
