@@ -68,7 +68,7 @@ function buildReply(input: string): { reply: string; intent?: Intent } {
     };
   }
   if (/swap|exchange|trade/i.test(text)) return { reply: "I can help plan a swap. Choose the token you’re spending, the token you want, and your preferred network. Live quotes and execution are not connected in this preview." };
-  if (/market|price|trend|overview/i.test(text)) return { reply: "Market snapshot is illustrative in this build. ETH and SOL are shown as positive, while BTC is slightly down. Connect a market data provider before relying on live prices." };
+  if (/market|price|trend|overview/i.test(text)) return { reply: "I couldn't retrieve verified live market data from the assistant service just now. The market panel may still load separately; please retry before relying on current prices." };
   if (/wallet|address|safe|risk|scam/i.test(text)) return { reply: "Before sending: verify the address through a trusted channel, check the network and asset, review the amount and fees, and start with a small test transfer if appropriate. Never share your recovery phrase." };
   return { reply: "I can help you plan a transfer, think through a swap, review wallet safety, or explain a market concept. For any transaction, I’ll show the details for review first." };
 }
