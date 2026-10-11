@@ -38,7 +38,7 @@ export default function Home() {
           <a href="#security">Security</a>
           <a href="#developers">Developers</a>
         </nav>
-        <a className="header-link" href="#demo">Get started <ArrowUpRight size={14} /></a>
+        <a className="header-link" href="/app">Get started <ArrowUpRight size={14} /></a>
         <details className="mobile-nav">
           <summary aria-label="Open navigation menu">Menu <span>＋</span></summary>
           <nav aria-label="Mobile navigation">
@@ -59,7 +59,7 @@ export default function Home() {
           <h1 id="hero-title">Money should<br />understand <em>you.</em></h1>
           <p className="hero-description">Send crypto with a simple conversation. Sonus understands who you’re paying, why you’re paying, and what needs to happen before money moves.</p>
           <div className="hero-actions">
-            <a className="primary-link" href="#demo">Try Sonus <ArrowRight size={16} /></a>
+            <a className="primary-link" href="/app">Try Sonus <ArrowRight size={16} /></a>
             <a className="secondary-link" href="#product">Explore the platform <ArrowDownRight size={15} /></a>
           </div>
           <p className="trust-note"><span /> Built for clarity. Designed for control.</p>
@@ -143,7 +143,7 @@ export default function Home() {
         <div className="roadmap-line"><div><span>01</span><strong>Core payment flow</strong><small>Intent and transaction preview</small></div><div><span>02</span><strong>Rules and safety</strong><small>Policies and risk signals</small></div><div><span>03</span><strong>Groups and SDK</strong><small>Shared payments and integrations</small></div></div>
       </section>
 
-      <section className="final-cta" aria-labelledby="final-cta-title"><div className="cta-light" aria-hidden="true" /><p className="eyebrow">SONUS · PAYMENT INTELLIGENCE</p><h2 id="final-cta-title">Make every payment<br /><em>make sense.</em></h2><p>More understanding. More context. More control.</p><a className="primary-link" href="#top">Get started <ArrowUpRight size={16} /></a></section>
+      <section className="final-cta" aria-labelledby="final-cta-title"><div className="cta-light" aria-hidden="true" /><p className="eyebrow">SONUS · PAYMENT INTELLIGENCE</p><h2 id="final-cta-title">Make every payment<br /><em>make sense.</em></h2><p>More understanding. More context. More control.</p><a className="primary-link" href="/app">Open workspace <ArrowUpRight size={16} /></a></section>
 
       <footer className="site-footer">
         <div className="footer-main">
