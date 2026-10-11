@@ -69,7 +69,14 @@ After the connected wallet returns a valid transaction hash for an Arc Testnet n
 
 ## Searchable payment memory and notes
 
-The Activity page can search locally recorded transactions by recipient address, sender address, amount, asset, network, transaction hash, or personal note, and filter by status. Each record has an optional 240-character note for the payment's purpose or context. Notes are stored only alongside that transaction in the same browser-local `sonus:transactions:v1` record. They are not sent to the chain, wallet, assistant API, or Sonus server. The notes are not synced across devices, and they are lost if the browser's local storage is cleared. This feature searches only records Sonus has saved; it does not discover transactions made outside Sonus.
+The Activity page can search locally recorded transactions by recipient address, sender address, amount, asset, network, transaction hash, or personal note, and filter by status. Each record has an optional 240-character note for the payment's purpose or context. Notes are stored only alongside that transaction in the same browser-local `sonus:transactions:v1` record. They are not sent to the chain, wallet, assistant API, or Sonus server. The notes are not synced across devices, and they are lost if the browser's local storage is cleared. The Activity page also provides a user-triggered JSON export of the local transaction records and notes. The export contains wallet addresses and transaction hashes, so users should store the downloaded file carefully. Export does not upload data to Sonus. This feature searches only records Sonus has saved; it does not discover transactions made outside Sonus.
+
+
+Manual cases to verify locally:
+- Search by a recipient address, transaction hash, amount, and saved payment note; clear search and restore all records.
+- Filter by confirmed, pending, submitted, and failed status; empty results should show a useful message.
+- Add a payment note, reload the page, and confirm the note remains on the same transaction.
+- Export JSON and confirm it contains the current local records and notes; no request should be sent to a server.
 
 ## Saved recipient address book
 
