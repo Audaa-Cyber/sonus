@@ -341,6 +341,20 @@ export default function SonusWorkspace() {
     openConnectModal();
   }
 
+  async function showReceiveAddress() {
+    if (!walletAddress) {
+      setNotice("Connect a wallet to receive funds. Choose the wallet you want to use.");
+      connectWallet();
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(walletAddress);
+      setNotice("Your selected wallet's public receiving address was copied: " + walletAddress + ". Share it only on the intended network; this does not verify who will send funds.");
+    } catch {
+      setNotice("Your selected wallet's public receiving address is " + walletAddress + ". Copy it manually and confirm the sender uses the correct network.");
+    }
+  }
+
 
   async function switchToArcTestnet() {
     if (!isConnected || !walletAddress) { setNotice("Choose and connect a wallet before switching networks."); return; }
@@ -848,7 +862,7 @@ export default function SonusWorkspace() {
                   <button onClick={() => { setInput("Prepare to send 25 USDC to Alex for lunch"); document.getElementById("ws-assistant-input")?.focus(); }}><span className="ws-action-icon"><ArrowUpRight size={18} /></span><strong>Send</strong><small>Transfer assets</small></button>
                   <button onClick={() => navigate("Swap")}><span className="ws-action-icon"><ArrowLeftRight size={18} /></span><strong>Swap</strong><small>Exchange tokens</small></button>
                   <button onClick={() => navigate("Bridge")}><span className="ws-action-icon"><Globe2 size={18} /></span><strong>Bridge</strong><small>Move networks</small></button>
-                  <button onClick={() => navigate("Portfolio")}><span className="ws-action-icon"><Plus size={18} /></span><strong>Receive</strong><small>Get an address</small></button>
+                  <button onClick={() => void showReceiveAddress()}><span className="ws-action-icon"><Plus size={18} /></span><strong>Receive</strong><small>Copy wallet address</small></button>
                 </div>
                 <div className="ws-safety-note"><ShieldCheck size={16} /><span><strong>You’re in control.</strong> Every transaction should be reviewed before approval.</span></div>
               </section>
