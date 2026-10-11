@@ -164,7 +164,7 @@ export default function SonusWorkspace() {
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (parsed && typeof parsed === "object") {
-          const rules = parsed as { enabled?: unknown; maxSingleUsdc?: unknown; dailyCapUsdc?: unknown };
+          const rules = parsed as { enabled?: unknown; maxSingleUsdc?: unknown; dailyCapUsdc?: unknown; requireSavedRecipient?: unknown };
           const validLimit = (value: unknown) => typeof value === "string" && value.length <= 12 && /^\d+(?:\.\d{1,6})?$/.test(value) && Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1000000000;
           if (typeof rules.enabled === "boolean" && validLimit(rules.maxSingleUsdc) && validLimit(rules.dailyCapUsdc)) {
             setSpendingRules({ enabled: rules.enabled, maxSingleUsdc: rules.maxSingleUsdc as string, dailyCapUsdc: rules.dailyCapUsdc as string, requireSavedRecipient: rules.requireSavedRecipient === true });
