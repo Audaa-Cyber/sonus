@@ -15,7 +15,7 @@ The current app has a Next.js workspace, browser speech input, a server-side Ope
 
 Current limitations:
 - The LLM currently creates validated intent drafts and explanatory text; there is no general-purpose tool execution framework.
-- No recipient/name resolution or verified contact book.
+- A browser-local saved-recipient address book now resolves exact saved aliases to stored EVM addresses. It is not synced and does not verify identity or ownership; ENS or other resolver integrations remain unimplemented.
 - No payment memory or configurable policy engine.
 - A deterministic preflight endpoint now blocks malformed/zero/self recipient addresses, invalid amounts, and unsupported route combinations before the Arc Testnet send flow proceeds. It is not a phishing scanner or transaction simulation, and no external security provider is connected yet.
 - No live multi-chain portfolio, market/news intelligence, swaps, bridge execution, staking/yield, limit orders, perpetuals, token creation, or developer SDK/API.
