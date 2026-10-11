@@ -60,11 +60,13 @@ Each feature needs a provider adapter, server-side validation, loading/error/emp
 - Show the exact destination, chain, asset contract/native asset, amount, fee range, and relevant warnings before wallet authorization.
 - Handle rejected, replaced, dropped, reverted, pending, confirmed, and receipt-timeout states without encouraging duplicate sends.
 
-### 6. Swaps
-- Add quote comparison, token metadata and decimals, minimum received, price impact, route, gas, approval requirements, expiry, and slippage controls.
-- Start with one EVM swap aggregator; add another only if needed for coverage or resilience.
-- Simulate/validate the final transaction where supported. Require wallet authorization. Never ask the LLM to construct arbitrary calldata.
-- Native USDC transfers on Arc Testnet are not ERC-20 swaps. Verify supported chains before displaying a live swap option.
+### 6. Swaps — Circle App Kit selected
+- Use Circle's App Kit Swap integration as the intended provider. Do not silently fall back to 0x or LI.FI.
+- Circle's current App Kit documentation describes Swap as server-side only today. It requires a server-side wallet adapter and a Circle API/Kit key; the current Sonus browser-wallet flow is not yet compatible with swap execution.
+- Arc Testnet swap coverage is limited to USDC, EURC, and cirBTC, and testnet liquidity can be thin. Check the current Circle supported-chain/token matrix before exposing any pair.
+- Before enabling execution, solve the wallet model transparently without asking users to submit private keys or using a Sonus-owned wallet to trade on a user's behalf without explicit disclosure and consent.
+- Add quote preview with estimated output, minimum received, fees, gas, approval requirements, quote expiry, and slippage controls. Never fabricate an estimate when Circle cannot return one.
+- Keep quote and execution separate; require explicit human approval of the exact transaction and test provider failure, unsupported pairs, quote expiry, and receipt recovery.
 
 ### 7. Bridges and cross-chain swaps
 - Use a cross-chain routing provider with explicit source/destination chain and token support.
@@ -130,8 +132,8 @@ Treat these as candidate integrations to evaluate, not commitments. Pricing, fre
 | RPC / node access | Arc's official RPC for Arc Testnet; Alchemy, QuickNode, or another provider for supported production chains | Reads, simulation support where available, broadcast/receipts | Chain coverage differs; Arc Testnet support must be verified separately |
 | Portfolio and token balances | Alchemy Portfolio APIs; compare with other multi-chain indexers | Token balances, metadata, transactions across supported chains | Partial failures and chain gaps; API key required for production usage |
 | Market prices and metadata | CoinGecko API; optionally DefiLlama for protocol/yield context | Prices, token metadata, market data | Rate limits, attribution/terms, token mapping quality |
-| EVM swaps | 0x Swap API | Quotes, liquidity aggregation, executable transaction data | Requires API key; supported chains and tokens vary; approvals must be handled safely |
-| Cross-chain routes / bridges | LI.FI API; compare Across or other bridge providers for specific routes | Route discovery, quotes, cross-chain swap/bridge execution | Route/provider risk, chain support, destination finality and recovery |
+| EVM swaps | Circle App Kit Swap | Same-chain swap routing and transaction workflow on supported chains | Server-side wallet adapter required today; Arc Testnet pair/liquidity support is limited; current external browser-wallet flow cannot execute through it yet |
+| Cross-chain routes / bridges | Circle CCTP / App Kit Bridge | Native USDC cross-chain transfer via Circle infrastructure | Supported chains, transfer mode, destination completion, and fees must be checked |
 | EVM transaction simulation | Tenderly Simulation API; also evaluate GoPlus simulation/security APIs | Dry-run execution and decoded effects where supported | Verify Arc Testnet support and coverage before depending on it |
 | Token/address/approval security | GoPlus Security APIs; consider Blockaid or another commercial scanner | Token, address, approval, phishing and transaction-risk signals | Not a safety guarantee; coverage differs by chain |
 | EVM name resolution | ENS libraries/contracts; viem/wagmi integrations | ENS name-to-address and reverse resolution | ENS is not universal identity verification; other namespaces need adapters |
@@ -150,8 +152,8 @@ Treat these as candidate integrations to evaluate, not commitments. Pricing, fre
 3. RPC: Arc Testnet for current test flow, plus a production-chain RPC provider after chain choice.
 4. Portfolio: one indexer with explicit partial-failure handling.
 5. Prices: one market-data provider.
-6. Swap: one aggregator for supported EVM mainnets.
-7. Bridge: one cross-chain router, only for chains it explicitly supports.
+6. Swap: Circle App Kit selected; enable only after wallet-model compatibility and supported-chain validation.
+7. Bridge: Circle CCTP / App Kit Bridge for supported USDC routes.
 8. Security: GoPlus plus transaction simulation where supported.
 9. Identity: ENS for ENS names, with a resolver interface for other namespaces.
 10. Persistence: Supabase/Postgres for editable contacts, policies, and payment memory.
@@ -165,7 +167,7 @@ Use environment variables, never hard-code keys or commit actual secrets:
 - `OPENAI_API_KEY` or the chosen LLM provider key
 - `ALCHEMY_API_KEY` or the chosen RPC/indexer key
 - `COINGECKO_API_KEY` if the selected plan requires it
-- `ZEROX_API_KEY` for 0x Swap API
+- `CIRCLE_API_KEY` or the current Circle App Kit key format, only when the Circle swap adapter is actually enabled
 - `TENDERLY_ACCOUNT_SLUG`, `TENDERLY_PROJECT_SLUG`, `TENDERLY_ACCESS_KEY` if Tenderly is selected
 - Provider-specific security API credentials if required
 - Supabase project URL and public client key for the browser; service-role key only on the server
@@ -208,8 +210,8 @@ A feature is not complete until:
 4. Add editable recipient contacts and supported name resolution.
 5. Add security checks and transaction simulation on supported chains.
 6. Add real portfolio and transaction history.
-7. Add swaps on one supported EVM mainnet.
-8. Add bridge routing and status recovery.
+7. Implement Circle App Kit swap only after the wallet model and supported networks are validated.
+8. Add Circle CCTP / App Kit Bridge with status recovery.
 9. Add policy engine and payment memory.
 10. Add voice-provider abstraction and language options.
 11. Add staking/yield discovery, then separately vetted execution.
