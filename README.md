@@ -69,6 +69,18 @@ The assistant endpoint can also append a live market snapshot when the detected 
 
 Provider availability, API terms, and rate limits can change. The current integration uses the public endpoint without a key; production should use an appropriate provider plan or a controlled caching/proxy strategy if usage grows.
 
+## Transaction risk preflight
+
+Before Sonus opens the wallet approval step for its Arc Testnet native-USDC send flow, it calls `POST /api/risk/preflight`. The endpoint blocks malformed EVM addresses, the zero address, self-transfers, invalid/non-positive amounts, and unsupported network/asset combinations. It also warns that testnet funds are not real funds and that an address format does not verify recipient identity.
+
+This is a **deterministic parameter check only**, not a security scanner. It does not query phishing lists, inspect token contracts, simulate execution, verify recipient ownership, or guarantee safety. The endpoint returns `securityProviderConnected: false` to make that limitation explicit. The send flow fails closed if the endpoint is unavailable, and the wallet still presents the final transaction for user authorization.
+
+Manual cases to verify locally:
+- Valid non-zero recipient, positive USDC amount, Arc Testnet chain ID `5042002`: review warnings returned; wallet confirmation remains required.
+- Zero recipient, self-transfer, malformed address, zero/negative/over-precision amount, wrong chain or unsupported asset: blocked; no transaction submitted.
+- Preflight endpoint returns an error: send stops before wallet authorization.
+- User rejects the final wallet request: no transaction should be reported as sent.
+
 ## Swap provider decision
 
 Sonus has selected **Circle App Kit Swap** as its intended swap provider. It will not silently fall back to 0x or LI.FI.
