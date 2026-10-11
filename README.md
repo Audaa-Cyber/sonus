@@ -27,3 +27,41 @@ The login command opens a browser and saves a local token. Do not commit the tok
 npm install
 npm run dev
 ```
+
+
+## V1 payment workspace status
+
+All work in this iteration is on `redesign/dark-signal-landing`. The `main` branch is not modified by these changes.
+
+Implemented in the workspace:
+- Browser EVM wallet connection and account/network change listeners.
+- Arc Testnet network switch/add flow.
+- Live native USDC balance read through `eth_getBalance` when a wallet is connected to Arc Testnet.
+- Natural-language payment drafts with basic amount/token validation.
+- Recipient-format warning: a 40-byte EVM address shape is not proof of identity or ownership.
+- Native USDC fee estimate using `eth_estimateGas` and `eth_gasPrice` on Arc Testnet.
+- Basic comparison of the draft amount plus estimated fee against the wallet's current native balance.
+- Voice input through the browser's speech-recognition API where supported.
+
+### Arc Testnet configuration
+
+- Network: Arc Testnet
+- Chain ID: `5042002` (`0x4cef52`)
+- RPC: `https://rpc.testnet.arc.network`
+- Native currency: USDC, 18 decimals
+- Explorer: `https://testnet.arcscan.app`
+
+The balance reader uses the connected wallet's RPC provider. It does not require an RPC API key.
+
+### Current limitations
+
+- No transaction is signed or sent by Sonus yet.
+- Fee estimation is currently limited to native USDC transfers on Arc Testnet.
+- Recipient names are not resolved. Users must supply a wallet address; an address-format match does not verify who controls it.
+- The dashboard's portfolio chart, market prices, and activity examples are illustrative, not live.
+- A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review.
+- This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
+
+## Verification
+
+GitHub Actions runs typecheck, lint, and production build checks. Check the workflow status on the [Sonus checks page](https://github.com/Audaa-Cyber/sonus/actions/workflows/ci.yml).
