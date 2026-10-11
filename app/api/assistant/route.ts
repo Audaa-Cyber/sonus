@@ -80,7 +80,7 @@ function localFallback(message: string): AssistantOutput {
 function bindIntentToUserText(output: AssistantOutput, userText: string): AssistantOutput {
   if (output.intent.action !== "transfer") return output;
   const context = userText.toLowerCase();
-  if (!/\\b(send|pay|transfer)\\b/i.test(userText)) {
+  if (!/\b(send|pay|transfer)\b/i.test(userText)) {
     return { ...output, intent: { ...output.intent, action: "unknown", amount: null, asset: null, recipient: null, needsClarification: true, clarificationQuestion: "Are you asking to prepare a transfer, or just discussing one?" } };
   }
 
@@ -91,14 +91,14 @@ function bindIntentToUserText(output: AssistantOutput, userText: string): Assist
     intent.clarificationQuestion = "Please provide the exact recipient address or name you want to use.";
   }
   if (intent.amount) {
-    const numbers = userText.match(/(?:\\$\\s*)?\\d+(?:\\.\\d+)?|\\.\\d+/g) ?? [];
-    if (!numbers.some(token => Number(token.replace(/^\\$\\s*/, "")) === Number(intent.amount))) {
+    const numbers = userText.match(/(?:\$\s*)?\d+(?:\.\d+)?|\.\d+/g) ?? [];
+    if (!numbers.some(token => Number(token.replace(/^\$\s*/, "")) === Number(intent.amount))) {
       intent.amount = null;
       intent.needsClarification = true;
       intent.clarificationQuestion = "What exact amount should I prepare?";
     }
   }
-  if (intent.asset && !new RegExp(`\\\\b${intent.asset}\\\\b`, "i").test(userText)) {
+  if (intent.asset && !new RegExp(`\\b${intent.asset}\\b`, "i").test(userText)) {
     intent.asset = null;
     intent.needsClarification = true;
     intent.clarificationQuestion = "Which asset should I use? Please specify the token.";
