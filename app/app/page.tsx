@@ -1,6 +1,7 @@
  "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Activity, ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
   Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command,
@@ -16,6 +17,9 @@ type PaymentTx = { hash: string; status: "submitted" | "confirmed" | "failed" | 
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
+type SpeechRecognitionLike = { lang: string; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+type SpeechWindow = Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
 declare global { interface Window { ethereum?: Eip1193Provider } }
 const ARC_TESTNET_CHAIN_ID = 5042002;
 
@@ -80,7 +84,7 @@ export default function SonusWorkspace() {
   const [balanceBusy, setBalanceBusy] = useState(false);
   const [paymentTx, setPaymentTx] = useState<PaymentTx | null>(null);
   const [walletBalances, setWalletBalances] = useState<WalletBalances>({ native: null, status: "Not loaded", updatedAt: null });
-  const recognition = useRef<any>(null);
+  const recognition = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
     const provider = window.ethereum;
@@ -300,7 +304,8 @@ export default function SonusWorkspace() {
 
   function startVoice() {
     if (typeof window === "undefined") return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const speechWindow = window as SpeechWindow;
+    const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setNotice("Voice input is not supported in this browser. Try a recent version of Chrome.");
       return;
@@ -314,7 +319,7 @@ export default function SonusWorkspace() {
     engine.lang = "en-US";
     engine.interimResults = false;
     engine.maxAlternatives = 1;
-    engine.onresult = (event: any) => {
+    engine.onresult = (event) => {
       const transcript = event.results?.[0]?.[0]?.transcript || "";
       setInput(transcript);
       setListening(false);
@@ -336,9 +341,9 @@ export default function SonusWorkspace() {
   return (
     <main className="ws-root">
       <aside className="ws-sidebar">
-        <a href="/" className="ws-brand" aria-label="Sonus home">
+        <Link href="/" className="ws-brand" aria-label="Sonus home">
           <span className="ws-brand-mark"><i /><i /><i /></span><span>SONUS<span className="ws-brand-period">.</span></span>
-        </a>
+        </Link>
         <div className="ws-workspace-label">WORKSPACE <ChevronDown size={13} /></div>
         <nav className="ws-nav" aria-label="Workspace navigation">
           <p className="ws-nav-caption">YOUR SPACE</p>
