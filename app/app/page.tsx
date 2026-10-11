@@ -43,10 +43,10 @@ function buildReply(input: string): { reply: string; intent?: Intent } {
   const text = input.trim();
   const send = /\b(send|pay|transfer)\b/i.test(text);
   if (send) {
-    const amountMatch = text.match(/(?:\$\s*)?(\d+(?:\.\d+)?)\s*(usdc|usdt|eth|sol|usd)?/i);
+    const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|usd)?/i);
     const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
     const asset = (amountMatch?.[2] || "USDC").toUpperCase();
-    const amount = amountMatch?.[1] || "";
+    const amount = amountMatch?.[1] ? (amountMatch[1].startsWith(".") ? "0" + amountMatch[1] : amountMatch[1]) : "";
     const recipient = recipientMatch?.[1] || "";
     if (!amount || !recipient || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !SUPPORTED_DRAFT_ASSETS.has(asset)) {
       return { reply: "I can help prepare that, but I need a valid positive amount, a supported token (USDC, USDT, ETH, or SOL), and a recipient. For example: “Send 25 USDC to Alex for lunch.”" };
