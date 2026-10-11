@@ -18,6 +18,7 @@ test("rejects malformed JSON, null, arrays, missing fields, and oversized payloa
   assert.equal(parseRiskPayload("[]").status, 400);
   assert.equal(parseRiskPayload("{}").status, 400);
   assert.equal(parseRiskPayload(" ".repeat(8001)).status, 413);
+  assert.equal(parseRiskPayload("é".repeat(4001)).status, 413, "limit is measured in UTF-8 bytes");
 });
 
 test("allows a valid Arc Testnet transfer only with explicit review warnings", () => {
@@ -39,11 +40,16 @@ test("blocks the zero address and self-transfers", () => {
 });
 
 test("blocks malformed addresses and invalid amounts", () => {
-  for (const amount of ["0", "-1", "1.1234567", "1e4", "01", "99999999999999999"]) {
+  for (const amount of ["0", "-1", "1.1234567", "1e4", "01", "1000000000.000001", "1000000001", "99999999999999999"]) {
     const result = evaluateRiskPayload({ ...valid(), amount });
     assert.equal(result.allowedToContinue, false, "invalid amount should be blocked: " + amount);
     assert.ok(result.checks.some(check => check.code === "invalid_amount"));
   }
+  const maximum = evaluateRiskPayload({ ...valid(), amount: "1000000000" });
+  assert.equal(maximum.allowedToContinue, true, "the configured maximum is inclusive");
+  const zeroSender = evaluateRiskPayload({ ...valid(), sender: "0x0000000000000000000000000000000000000000" });
+  assert.equal(zeroSender.allowedToContinue, false);
+  assert.ok(zeroSender.checks.some(check => check.code === "zero_sender"));
   const address = evaluateRiskPayload({ ...valid(), recipient: "not-an-address" });
   assert.equal(address.allowedToContinue, false);
   assert.ok(address.checks.some(check => check.code === "invalid_recipient"));
