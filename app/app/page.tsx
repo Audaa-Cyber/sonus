@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 type Message = { role: "assistant" | "user"; text: string };
+type SavedContact = { id: string; name: string; address: string; createdAt: number };
 type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string; feeEstimate?: string };
 type WalletBalances = { native: string | null; status: string; updatedAt: number | null };
 type PaymentTx = { hash: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string };
@@ -81,6 +82,11 @@ export default function SonusWorkspace() {
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
   ]);
   const [intent, setIntent] = useState<Intent | null>(null);
+  const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
+  const [contactsReady, setContactsReady] = useState(false);
+  const [contactNameInput, setContactNameInput] = useState("");
+  const [contactAddressInput, setContactAddressInput] = useState("");
+  const [contactFormError, setContactFormError] = useState("");
   const [listening, setListening] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [notice, setNotice] = useState("");
@@ -110,6 +116,31 @@ export default function SonusWorkspace() {
       up: quote ? quote.change24h >= 0 : true
     };
   });
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("sonus:contacts:v1");
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setSavedContacts(parsed.filter((item): item is SavedContact => Boolean(item) && typeof item.id === "string" && typeof item.name === "string" && EVM_ADDRESS_RE.test(String(item.address)) && typeof item.createdAt === "number").slice(0, 200));
+        }
+      }
+    } catch {
+      setContactFormError("Saved contacts could not be read from this browser.");
+    } finally {
+      setContactsReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!contactsReady) return;
+    try {
+      window.localStorage.setItem("sonus:contacts:v1", JSON.stringify(savedContacts));
+    } catch {
+      setContactFormError("Contacts could not be saved. Check available browser storage.");
+    }
+  }, [savedContacts, contactsReady]);
 
   useEffect(() => {
     let active = true;
@@ -358,6 +389,34 @@ export default function SonusWorkspace() {
     } finally { setBalanceBusy(false); }
   }
 
+  function saveContact(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = contactNameInput.trim().replace(/\\s+/g, " ");
+    const address = contactAddressInput.trim();
+    if (name.length < 1 || name.length > 50) { setContactFormError("Use a contact name between 1 and 50 characters."); return; }
+    if (!EVM_ADDRESS_RE.test(address) || /^0x0{40}$/i.test(address)) { setContactFormError("Enter a valid, non-zero EVM address."); return; }
+    if (savedContacts.some(contact => contact.name.toLowerCase() === name.toLowerCase() && contact.address.toLowerCase() !== address.toLowerCase())) {
+      setContactFormError("That name already exists. Remove or rename the existing contact first."); return;
+    }
+    const existing = savedContacts.find(contact => contact.name.toLowerCase() === name.toLowerCase() || contact.address.toLowerCase() === address.toLowerCase());
+    const next: SavedContact = { id: existing?.id || (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now())), name, address, createdAt: existing?.createdAt || Date.now() };
+    setSavedContacts(current => existing ? current.map(contact => contact.id === existing.id ? next : contact) : [...current, next].slice(-200));
+    setContactNameInput("");
+    setContactAddressInput("");
+    setContactFormError("");
+    setNotice("Saved “" + name + "” in this browser only. The address is not identity-verified.");
+  }
+
+  function removeContact(contact: SavedContact) {
+    setSavedContacts(current => current.filter(item => item.id !== contact.id));
+    setNotice("Removed “" + contact.name + "” from this browser’s address book.");
+  }
+
+  function resolveSavedRecipient(value: string) {
+    const exact = savedContacts.find(contact => contact.name.toLowerCase() === value.trim().toLowerCase());
+    return exact?.address || value;
+  }
+
   function disconnectWalletView() {
     setWalletAddress(null);
     setWalletChainId(null);
@@ -399,8 +458,10 @@ export default function SonusWorkspace() {
       setMessages(current => [...current, { role: "assistant", text: data.reply || "I couldn't produce a useful response. Please try rephrasing that." }]);
       const parsed = data.intent;
       if (parsed?.action === "transfer" && parsed.amount && parsed.recipient && parsed.asset && SUPPORTED_DRAFT_ASSETS.has(parsed.asset.toUpperCase())) {
+        const resolvedRecipient = resolveSavedRecipient(parsed.recipient);
+        if (resolvedRecipient !== parsed.recipient) setNotice("Resolved the name using your local saved contact. This does not verify who controls the address.");
         setIntent({
-          recipient: parsed.recipient,
+          recipient: resolvedRecipient,
           amount: parsed.amount,
           asset: parsed.asset.toUpperCase(),
           network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
@@ -414,7 +475,7 @@ export default function SonusWorkspace() {
     } catch (error) {
       const result = buildReply(clean);
       setMessages(current => [...current, { role: "assistant", text: result.reply + "\\n\\nThe AI service is unavailable right now, so this response came from the local fallback." }]);
-      if (result.intent) { setIntent(result.intent); setPaymentTx(null); }
+      if (result.intent) { setIntent({ ...result.intent, recipient: resolveSavedRecipient(result.intent.recipient) }); setPaymentTx(null); }
       setNotice("Assistant API unavailable: " + (error instanceof Error ? error.message : "request failed"));
     } finally {
       setAssistantBusy(false);
@@ -546,10 +607,22 @@ export default function SonusWorkspace() {
               </section>
             </div>
 
+            <section className="ws-contacts-panel" aria-labelledby="ws-contacts-title">
+              <div className="ws-section-heading"><div><h2 id="ws-contacts-title">Saved recipients</h2><p>Resolve names you have explicitly saved on this browser</p></div><span className="ws-contact-count">{savedContacts.length} / 200</span></div>
+              <form className="ws-contact-form" onSubmit={saveContact}>
+                <label><span>CONTACT NAME</span><input value={contactNameInput} onChange={event => setContactNameInput(event.target.value)} maxLength={50} placeholder="e.g. Alex" autoComplete="off" required /></label>
+                <label><span>EVM WALLET ADDRESS</span><input value={contactAddressInput} onChange={event => setContactAddressInput(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} required /></label>
+                <button type="submit"><Plus size={14} /> Save contact</button>
+              </form>
+              {contactFormError && <p className="ws-contact-error" role="alert">{contactFormError}</p>}
+              {savedContacts.length ? <div className="ws-contact-list">{savedContacts.map(contact => <div className="ws-contact-row" key={contact.id}><span className="ws-contact-avatar">{contact.name.slice(0, 1).toUpperCase()}</span><div className="ws-contact-info"><strong>{contact.name}</strong><small>{contact.address.slice(0, 10) + "…" + contact.address.slice(-8)}</small></div><button type="button" onClick={() => { setInput("Send 25 USDC to " + contact.name); document.getElementById("ws-assistant-input")?.focus(); setNotice("Prepared a prompt for “" + contact.name + "”. Review the resolved address before any transaction."); }} aria-label={"Prepare payment to " + contact.name}><ArrowUpRight size={14} /> Pay</button><button type="button" className="ws-contact-remove" onClick={() => removeContact(contact)} aria-label={"Remove " + contact.name}><X size={14} /></button></div>)}</div> : <div className="ws-contact-empty"><Wallet size={17} /><span>No saved recipients yet. Add a name and address to reuse it in payment requests.</span></div>}
+              <p className="ws-contact-disclaimer"><LockKeyhole size={12} /> Stored only in this browser’s local storage. Contacts are not synced or identity-verified. Double-check addresses before sending.</p>
+            </section>
+
             <section className="ws-assistant-panel" id="ws-assistant">
               <div className="ws-assistant-heading"><div className="ws-assistant-symbol"><AudioLines size={19} /></div><div><span className="ws-eyebrow">YOUR PAYMENT INTELLIGENCE</span><h2>Ask Sonus<span className="ws-period">.</span></h2><p>Type it or say it. Start with what you want to do.</p></div><span className="ws-assistant-beta">PREVIEW</span></div>
               <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}{assistantBusy && <div className="ws-message assistant"><span className="ws-message-avatar"><AudioLines size={14} /></span><p>Thinking through your request…</p></div>}</div>
-              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? "Address format only · not verified" : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This is a draft until you choose “Send test payment” and approve the exact transaction in your wallet. Names are not resolved. Sending is restricted to native USDC on Arc Testnet."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }} disabled={balanceBusy || paymentTx?.status === "submitted" || paymentTx?.status === "pending"}>{paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction pending" : balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button>{intent.feeEstimate && EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && intent.asset === "USDC" && paymentTx?.status !== "submitted" && paymentTx?.status !== "pending" && paymentTx?.status !== "confirmed" && <button className="ws-send-payment-btn" onClick={() => void sendArcTestnetPayment()} disabled={balanceBusy}>{balanceBusy ? "Working…" : "Send test payment"} <ArrowUpRight size={13} /></button>}</div></div>}
+              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? (savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) ? "Saved contact address · not identity-verified" : "Address format only · not verified") : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This is a draft until you choose “Send test payment” and approve the exact transaction in your wallet. Names are not resolved. Sending is restricted to native USDC on Arc Testnet."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }} disabled={balanceBusy || paymentTx?.status === "submitted" || paymentTx?.status === "pending"}>{paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction pending" : balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button>{intent.feeEstimate && EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && intent.asset === "USDC" && paymentTx?.status !== "submitted" && paymentTx?.status !== "pending" && paymentTx?.status !== "confirmed" && <button className="ws-send-payment-btn" onClick={() => void sendArcTestnetPayment()} disabled={balanceBusy}>{balanceBusy ? "Working…" : "Send test payment"} <ArrowUpRight size={13} /></button>}</div></div>}
               {paymentTx && <div className={"ws-payment-result " + paymentTx.status} role="status" aria-live="polite"><div><span className="ws-eyebrow">ON-CHAIN TRANSACTION</span><strong>{paymentTx.status === "confirmed" ? "Payment confirmed" : paymentTx.status === "failed" ? "Transaction failed" : paymentTx.status === "pending" ? "Confirmation pending" : "Transaction submitted"}</strong><small>{paymentTx.detail}</small><a href={"https://testnet.arcscan.app/tx/" + paymentTx.hash} target="_blank" rel="noreferrer">View transaction on Arcscan <ExternalLink size={12} /></a></div><button onClick={() => navigator.clipboard.writeText(paymentTx.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(paymentTx.hash))} aria-label="Copy transaction hash"><Copy size={15} /></button></div>}<div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
               <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
               <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
