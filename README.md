@@ -146,6 +146,18 @@ The Settings page offers optional per-payment and daily recorded-spending limits
 
 The saved-recipient check compares the exact destination address and does not verify the real-world identity behind a contact name. These are client-side convenience checks, not secure wallet permissions or a production policy engine. Local storage can be modified or cleared, the history is capped at 100 records, and activity from other apps or devices is not included. Do not rely on this feature as the only control for valuable assets. Wallet confirmation and independent transaction review remain required.
 
+## Additional payment-control hardening
+
+The wallet send handler now has an in-memory submission lock to reduce accidental duplicate prompts from rapid repeated clicks in one page instance. It is not a cross-tab or server-side idempotency guarantee; users must still check transaction status before retrying.
+
+The risk preflight endpoint rejects malformed JSON, oversized requests, and non-object JSON payloads with client errors rather than dereferencing `null` or array input. These are input-hardening measures, not a substitute for a transaction simulator, address reputation service, or server-enforced spending policy.
+
 ## Verification
 
 GitHub Actions runs typecheck, lint, and production build checks. Check the workflow status on the Sonus branch and pull request before deploying.
+
+Manual checks for the latest payment-control changes:
+- Rapidly click Send twice and verify only one wallet approval attempt opens.
+- Send malformed preflight bodies (`null`, `[]`, invalid JSON, and oversized JSON) and verify they return a controlled 400/413 response rather than a server error.
+- Test both guardrails independently: amount caps enabled with saved-recipient disabled, then saved-recipient enabled with amount caps disabled.
+- Confirm policy status in Settings and verify the payment review dialog describes the active local rules.
