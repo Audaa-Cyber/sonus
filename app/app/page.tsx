@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import {
   Activity, ArrowDownLeft, ArrowDownUp, ArrowRight, ArrowUpRight, AudioLines,
-  BookOpen, Check, ChevronDown, CircleHelp, Clock3, Command, Compass, Globe2,
-  LayoutDashboard, Mic, MicOff, MoreHorizontal, Plus, Search, Send, Settings2,
+  BookOpen, ChevronDown, CircleHelp, Clock3, Command, Compass, Globe2,
+  LayoutDashboard, Mic, MicOff, MoreHorizontal, Search, Send, Settings2,
   ShieldCheck, Sparkles, TrendingUp, Wallet, X, Zap,
 } from "lucide-react";
 import "./workspace.css";
