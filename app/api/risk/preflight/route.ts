@@ -22,7 +22,11 @@ export async function POST(request: Request) {
   try {
     const raw = await request.text();
     if (raw.length > 8_000) return NextResponse.json({ error: "Request too large." }, { status: 413 });
-    body = JSON.parse(raw) as RiskRequest;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Expected a JSON object." }, { status: 400 });
+    }
+    body = parsed as RiskRequest;
   } catch {
     return NextResponse.json({ error: "Expected a JSON request." }, { status: 400 });
   }
