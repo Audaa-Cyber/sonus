@@ -360,6 +360,11 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 .ws-settings-input{display:flex;align-items:center;gap:8px;width:190px;flex-shrink:0;border:1px solid var(--ws-border);padding:0 10px}
 .ws-settings-input input{width:100%;min-width:0;height:40px;border:0;outline:0;background:transparent;color:var(--ws-text);font:12px var(--font-body)}
 .ws-settings-input b{color:var(--ws-muted);font:9px var(--font-mono)}
+.ws-settings-usage{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 22px 20px;padding:14px;border:1px solid var(--ws-border);background:rgba(0,0,0,.1)}
+.ws-settings-usage>div{display:flex;flex-direction:column;gap:7px}
+.ws-settings-usage span{color:var(--ws-muted);font:8px var(--font-mono);letter-spacing:.07em}
+.ws-settings-usage strong{color:var(--ws-green);font-size:17px;font-weight:500;overflow-wrap:anywhere}
+.ws-settings-usage small{grid-column:1/-1;color:var(--ws-muted);font-size:9px;line-height:1.7}
 .ws-settings-save{margin:18px 22px;padding:11px 14px;border:1px solid var(--ws-green);background:var(--ws-green);color:#0a1010;font:11px var(--font-body);cursor:pointer}
 .ws-settings-disclaimer{display:flex;align-items:flex-start;gap:10px;margin-top:18px;color:var(--ws-muted)}
 .ws-settings-disclaimer svg{flex-shrink:0;margin-top:3px}
