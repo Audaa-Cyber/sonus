@@ -24,7 +24,7 @@ export async function GET() {
     supportedEnvironment: {
       arcTestnet: {
         chain: "Arc_Testnet",
-        supportedTokens: "Not verified",
+        supportedTokens: [],
         caveat: "First-party same-chain swap support and token availability are not verified."
       },
       arcMainnet: {
