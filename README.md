@@ -81,6 +81,7 @@ Manual cases to verify locally:
 - Enable spending guardrails, set a per-payment limit below the draft amount, and verify Sonus blocks before opening the wallet confirmation; then test a daily cap against recorded same-sender transactions.
 - Connect the intended wallet and verify Settings shows the recorded UTC-day total for that sender; failed records should not count toward the displayed total.
 - Enable the saved-recipient rule and attempt a payment to an address absent from Contacts; verify Sonus blocks before wallet confirmation. Add the exact address and verify the rule permits proceeding to the normal preflight.
+- Confirm the wallet-review dialog states whether amount limits and saved-recipient checks are enabled, before asking the wallet to approve.
 
 ## Saved recipient address book
 
