@@ -70,6 +70,9 @@ export default function SonusWorkspace() {
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [notice, setNotice] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletChainId, setWalletChainId] = useState<number | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
   const recognition = useRef<any>(null);
 
   useEffect(() => {
