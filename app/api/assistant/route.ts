@@ -30,6 +30,10 @@ function isRateLimited(request: Request): boolean {
   const now = Date.now();
   const current = requestWindows.get(key);
   if (!current || now - current.startedAt >= WINDOW_MS) {
+    if (!current && requestWindows.size >= 5_000) {
+      const oldestKey = requestWindows.keys().next().value;
+      if (oldestKey) requestWindows.delete(oldestKey);
+    }
     requestWindows.set(key, { startedAt: now, count: 1 });
     return false;
   }
@@ -108,7 +112,9 @@ export async function POST(request: Request) {
   if (isRateLimited(request)) return NextResponse.json({ error: "Too many assistant requests. Wait a minute and try again." }, { status: 429 });
   let body: unknown;
   try {
-    body = await request.json();
+    const rawBody = await request.text();
+    if (rawBody.length > 20_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
