@@ -62,6 +62,25 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 - A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
 - This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
 
+## AI assistant API
+
+The workspace chat now calls a server-side `POST /api/assistant` route. When configured, it uses the OpenAI Responses API with a strict JSON schema so the UI receives a bounded reply and a typed intent draft. The model cannot sign transactions or call wallet methods; wallet signing remains in the browser and requires the wallet's own confirmation.
+
+### Configure locally
+
+1. Copy `.env.example` to `.env.local`.
+2. Set `OPENAI_API_KEY` to your own key. Optionally set `OPENAI_MODEL`; the default is `gpt-4.1-mini`.
+3. Restart the dev server after changing environment variables.
+
+The key is read only by the server route. Do not add it to client-side code, commit `.env.local`, or paste it into chat. Without a key, the endpoint uses a clearly marked limited local fallback so the workspace still works. This fallback is not an LLM.
+
+### Current AI limits
+
+- The model produces intent drafts and explanatory text only. It cannot send a transaction, resolve a name to a verified identity, fetch live balances, or claim a quote/simulation was performed.
+- Structured output is validated server-side before being returned to the UI.
+- The route limits message size and history length and applies a 25-second upstream timeout. Production deployment still needs per-user/IP rate limiting, usage budgets, authentication, request monitoring, and abuse protection.
+- Do not treat model interpretation as authorization. The UI and wallet must continue to validate the exact transaction independently.
+
 ## Verification
 
 GitHub Actions runs typecheck, lint, and production build checks. Check the workflow status on the [Sonus checks page](https://github.com/Audaa-Cyber/sonus/actions/workflows/ci.yml).
