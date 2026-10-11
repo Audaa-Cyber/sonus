@@ -33,3 +33,12 @@ test("terminal receipt states require a valid block hash and block number", () =
   assert.match(migration, /transaction_ledger_block_hash_format check/i);
   assert.match(migration, /status not in \(\x27confirmed\x27, \x27failed\x27\) or \(block_number is not null and block_hash is not null\)/i);
 });
+
+test("receipt observations are append-only and scoped to the parent ledger owner", () => {
+  assert.match(migration, /create table if not exists public\.transaction_ledger_events/i);
+  assert.match(migration, /foreign key \(transaction_id, user_id\)[\s\S]*?references public\.transaction_ledger \(id, user_id\)/i);
+  assert.match(migration, /alter table public\.transaction_ledger_events enable row level security/i);
+  assert.match(migration, /revoke insert, update, delete, truncate on public\.transaction_ledger_events from authenticated/i);
+  assert.match(migration, /revoke update, delete, truncate on public\.transaction_ledger_events from service_role/i);
+  assert.match(migration, /grant select, insert on public\.transaction_ledger_events to service_role/i);
+});
