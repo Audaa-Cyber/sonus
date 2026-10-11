@@ -253,7 +253,8 @@ export async function POST(request: Request) {
       "Sonus currently supports only native USDC transfers on Arc Testnet. Other assets and chains may be discussed or drafted but must never be represented as executable.",
       "Full portfolio balances, swaps, bridges, staking, and external identity resolution are not connected. Never claim a provider is selected, a quote exists, or a route is available. Never silently use a third-party swap provider.",
       "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise.",
-      "Return a single valid JSON object with keys reply and intent. The intent must contain action, amount, asset, recipient, chain, purpose, needsClarification, and clarificationQuestion. Use null for unknown optional values. Do not wrap the JSON in markdown."
+      "Return a single valid JSON object with keys reply and intent. The intent must contain action, amount, asset, recipient, chain, purpose, needsClarification, and clarificationQuestion. Use null for unknown optional values. Do not wrap the JSON in markdown.",
+      "Follow this output schema: " + JSON.stringify(schema)
     ].join("\\n");
     const upstream = await fetch(endpoint, {
       method: "POST",
