@@ -321,3 +321,8 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 .ws-history-disclaimer svg{flex-shrink:0;margin-top:3px}
 .ws-activity-icon.failed{color:#e08273}
 @media(max-width:620px){.ws-history-page{padding:20px 15px}.ws-history-summary{gap:7px}.ws-history-summary>div{padding:12px}.ws-history-summary strong{font-size:20px}.ws-history-transfer{grid-template-columns:1fr 1fr}.ws-history-transfer>div:last-child{grid-column:1/-1}.ws-history-card{padding:15px}.ws-history-card-top{align-items:flex-start;flex-direction:column}}
+
+.ws-history-refresh{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:9px 11px;border:1px solid var(--ws-border);background:transparent;color:var(--ws-green);font-size:10px;cursor:pointer}
+.ws-history-refresh:disabled{opacity:.5;cursor:wait}
+.ws-spin{animation:ws-spin 1s linear infinite}
+@keyframes ws-spin{to{transform:rotate(360deg)}}
