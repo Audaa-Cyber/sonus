@@ -444,26 +444,42 @@ export default function SonusWorkspace() {
   }
 
   async function refreshTransactionStatuses() {
-    const provider = window.ethereum;
-    if (!provider) { setNotice("Connect an EVM wallet to refresh pending transaction status."); return; }
     const unresolved = transactionHistory.filter(item => item.status === "submitted" || item.status === "pending");
     if (!unresolved.length) { setNotice("There are no pending transaction records to refresh."); return; }
     setHistoryRefreshing(true);
     try {
-      const chain = await provider.request({ method: "eth_chainId" }) as string;
-      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Switch your wallet to Arc Testnet to refresh these transaction records."); return; }
       let refreshed = 0;
+      let stillPending = 0;
       for (const item of unresolved) {
-        const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [item.hash] }) as { status?: string; blockNumber?: string } | null;
-        if (!receipt) continue;
-        const success = receipt.status === "0x1";
-        const blockNumber = receipt.blockNumber ? BigInt(receipt.blockNumber).toString() : undefined;
-        recordTransaction({ hash: item.hash, from: item.from, to: item.to, amount: item.amount, asset: item.asset, network: item.network, status: success ? "confirmed" : "failed", detail: success ? "Confirmed in block " + (blockNumber || "unknown") + "." : "The network reported a failed transaction.", ...(blockNumber ? { blockNumber } : {}) });
+        if (item.network !== "Arc Testnet" || item.asset !== "USDC") continue;
+        const response = await fetch("/api/transactions/receipt?hash=" + encodeURIComponent(item.hash), {
+          cache: "no-store",
+          headers: { Accept: "application/json" }
+        });
+        const payload: unknown = await response.json();
+        if (!response.ok || !payload || typeof payload !== "object") {
+          throw new Error("Receipt service could not verify " + item.hash.slice(0, 10) + "…");
+        }
+        const receipt = payload as { status?: unknown; blockNumber?: unknown; confirmations?: unknown };
+        if (receipt.status === "pending") { stillPending++; continue; }
+        if (receipt.status !== "confirmed" && receipt.status !== "failed") {
+          throw new Error("Receipt service returned an unrecognized status.");
+        }
+        const blockNumber = typeof receipt.blockNumber === "string" ? receipt.blockNumber : undefined;
+        const success = receipt.status === "confirmed";
+        const confirmations = typeof receipt.confirmations === "number" ? receipt.confirmations : 0;
+        const detail = success
+          ? "Mined successfully in block " + (blockNumber || "unknown") + " (" + confirmations + " confirmation" + (confirmations === 1 ? "" : "s") + " observed). Verify Arcscan for finality."
+          : "The network reports that this transaction reverted. Verify Arcscan before taking further action.";
+        recordTransaction({ hash: item.hash, from: item.from, to: item.to, amount: item.amount, asset: item.asset, network: item.network, status: success ? "confirmed" : "failed", detail, ...(blockNumber ? { blockNumber } : {}) });
         refreshed++;
       }
-      setNotice(refreshed ? "Updated " + refreshed + " transaction status" + (refreshed === 1 ? "." : "es.") : "No receipts found yet. Pending records remain pending; check Arcscan before retrying.");
+      const parts = [];
+      if (refreshed) parts.push("Updated " + refreshed + " mined transaction" + (refreshed === 1 ? "" : "s"));
+      if (stillPending) parts.push(stillPending + " still pending");
+      setNotice(parts.length ? parts.join("; ") + ". Verify important states in Arcscan; a receipt is a point-in-time snapshot." : "No eligible Arc Testnet USDC transaction records were found to refresh.");
     } catch (error) {
-      setNotice("Could not refresh transaction status: " + (error instanceof Error ? error.message : "RPC request failed") + ". Check Arcscan directly.");
+      setNotice("Could not refresh transaction status: " + (error instanceof Error ? error.message : "receipt service unavailable") + ". Pending records were not marked as failed.");
     } finally { setHistoryRefreshing(false); }
   }
 
