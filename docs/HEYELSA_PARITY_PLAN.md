@@ -17,7 +17,7 @@ Current limitations:
 - The LLM currently creates validated intent drafts and explanatory text; there is no general-purpose tool execution framework.
 - No recipient/name resolution or verified contact book.
 - No payment memory or configurable policy engine.
-- No dedicated transaction simulation or comprehensive risk engine.
+- A deterministic preflight endpoint now blocks malformed/zero/self recipient addresses, invalid amounts, and unsupported route combinations before the Arc Testnet send flow proceeds. It is not a phishing scanner or transaction simulation, and no external security provider is connected yet.
 - No live multi-chain portfolio, market/news intelligence, swaps, bridge execution, staking/yield, limit orders, perpetuals, token creation, or developer SDK/API.
 - Arc Testnet native USDC support does not imply that third-party data, swap, bridge, or yield providers support Arc Testnet.
 
@@ -87,8 +87,9 @@ Each feature needs a provider adapter, server-side validation, loading/error/emp
 - Add trending-token and meme-token discovery only with token safety checks and clear manipulation/scam warnings.
 
 ### 10. Security and transaction simulation
-- Combine address/token/approval/phishing intelligence with transaction simulation where supported.
-- Return evidence-based findings, confidence, provider, and timestamp. Treat missing results as unknown, not safe.
+- Current: `POST /api/risk/preflight` performs deterministic parameter checks for the Arc Testnet native-USDC send flow. It blocks malformed addresses, zero address, self-transfers, invalid amounts, and unsupported route combinations; it warns that testnet assets are not real funds and address format is not identity verification.
+- Current limitations: no phishing/address intelligence provider, token/approval scanner, or transaction simulation is connected. The endpoint labels this explicitly and must not be marketed as a complete security check.
+- Next: add a supported security provider and transaction simulation adapter only after verifying Arc Testnet coverage. Return evidence-based findings, confidence, provider, and timestamp. Treat missing results as unknown, not safe.
 - Provide a risk summary before authorization and block only according to explicit policy; let users understand the reason.
 - Never market a third-party scanner as a guarantee that an asset or transaction is safe.
 
