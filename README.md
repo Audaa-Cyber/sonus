@@ -174,3 +174,8 @@ Manual checks for the latest payment-control changes:
 ## Automated risk preflight tests
 
 Run `npm test` to execute the built-in Node test suite. The suite covers request parsing (malformed JSON, null, arrays, missing fields, oversized payloads), valid Arc Testnet review warnings, malformed/zero/self addresses, invalid amounts, and unsupported assets/networks/chain IDs. The deterministic rules live in `lib/risk-preflight.mjs` and are shared by the API route and tests, so the test suite exercises the same validation logic used by the endpoint. These tests do not simulate a real wallet, execute a transaction, or prove the transfer is safe.
+
+
+## Server-side receipt reconciliation
+
+`POST /api/transactions/receipt` accepts a transaction hash and the explicit Arc Testnet chain ID (`5042002`). The server queries the fixed Arc Testnet RPC, checks for a receipt, compares its block hash with the block currently returned at that height, and reports `pending`, `confirmed`, `failed`, or `reorged`. Responses are not cached. A successful receipt is an observation from one RPC provider, not a guarantee of irreversible finality. An unavailable canonical block is reported as unverified rather than confirmed. This endpoint does not persist records, discover transactions, or replace checking Arcscan.
