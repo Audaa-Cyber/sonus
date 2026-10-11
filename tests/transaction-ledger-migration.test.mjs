@@ -42,3 +42,15 @@ test("receipt observations are append-only and scoped to the parent ledger owner
   assert.match(migration, /revoke update, delete, truncate on public\.transaction_ledger_events from service_role/i);
   assert.match(migration, /grant select, insert on public\.transaction_ledger_events to service_role/i);
 });
+
+test("migration contains one complete ledger definition with well-formed hash checks", () => {
+  assert.equal((migration.match(/create table if not exists public\\.transaction_ledger \\(/gi) || []).length, 1);
+  assert.equal((migration.match(/create table if not exists public\\.transaction_ledger_events \\(/gi) || []).length, 1);
+  assert.match(migration, /transaction_ledger_block_hash_format check \\(block_hash is null or lower\\(block_hash\\) ~ '\\^0x\\[a-f0-9\\]\\{64\\}\\$'\\)/i);
+  assert.doesNotMatch(migration, /lower\\(block_hash\\) ~ '\\^0x\\[a-f0-9\\]\\{64\\}\\s*constraint/i);
+  assert.doesNotMatch(migration, /^\\),\\s*$/m);
+});
+
+test("confirmed and failed event observations require receipt block metadata", () => {
+  assert.match(migration, /transaction_ledger_events_terminal_receipt_required check \\([\\s\\S]*?status not in \\('confirmed', 'failed'\\) or \\(block_number is not null and block_hash is not null\\)/i);
+});
