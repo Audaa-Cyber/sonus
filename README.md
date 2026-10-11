@@ -83,15 +83,15 @@ Manual cases to verify locally:
 
 ## Swap provider decision
 
-Sonus has selected **Circle App Kit Swap** as its intended swap provider. It will not silently fall back to 0x or LI.FI.
+Sonus's preference is an Arc/Circle first-party swap path, and it will not silently fall back to 0x or LI.FI.
 
-- `GET /api/swap/capabilities` reports the provider choice and current readiness boundary without fabricating a quote.
-- Circle's current App Kit documentation describes Swap as server-side only. Sonus's current user-controlled browser-wallet flow is not yet compatible with Circle's required server-side wallet adapter.
-- Arc Testnet swap coverage is limited (USDC, EURC, and cirBTC), and liquidity may be thin. Supported tokens and networks must be checked before a real quote is shown.
-- Sonus must not ask users to paste private keys or quietly use a Sonus-controlled wallet to trade on their behalf. A quote and execution design that preserves clear user authorization is required before enabling swaps.
-- No live swap quote or swap execution is implemented yet. The endpoint is a capability/status response, not a swap quote.
+- `GET /api/swap/capabilities` reports the provider investigation and readiness boundary without fabricating a quote.
+- Current public Arc App Kit documentation demonstrates bridging USDC between supported networks. We have not verified a supported public same-chain swap API in those docs.
+- Arc Portal's official FAQ says swap token availability is sourced by LI.FI. That means the Portal's routing should not be represented as a Circle-owned swap provider.
+- Therefore, live quotes and execution remain disabled until an official Arc/Circle first-party swap API, supported networks/tokens, and a compatible user-authorization model are verified.
+- Sonus must not ask users to paste private keys or quietly use a Sonus-controlled wallet to trade on their behalf.
 
-Reference: Circle App Kit documentation at `https://docs.arc.network/app-kit`.
+Official references: Arc App Kit bridge quickstart at `https://docs.arc.network/app-kit/quickstarts/bridge-tokens-across-blockchains`; Arc Portal FAQ at `https://help.arc.io/support_arc/en/arc-portal-faqs?id=arc_article_view&sysparm_article=KB0011405`.
 
 ## AI assistant API
 
