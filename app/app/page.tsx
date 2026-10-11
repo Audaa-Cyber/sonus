@@ -83,6 +83,7 @@ export default function SonusWorkspace() {
   const [walletBusy, setWalletBusy] = useState(false);
   const [balanceBusy, setBalanceBusy] = useState(false);
   const [paymentTx, setPaymentTx] = useState<PaymentTx | null>(null);
+  const [assistantBusy, setAssistantBusy] = useState(false);
   const [walletBalances, setWalletBalances] = useState<WalletBalances>({ native: null, status: "Not loaded", updatedAt: null });
   const recognition = useRef<SpeechRecognitionLike | null>(null);
 
@@ -292,14 +293,49 @@ export default function SonusWorkspace() {
     Settings: "Make Sonus work your way."
   } as Record<string, string>)[active] || "Your money, in context.", [active]);
 
-  function submitMessage(value = input) {
+  async function submitMessage(value = input) {
     const clean = value.trim();
-    if (!clean) return;
-    const result = buildReply(clean);
-    setMessages(current => [...current, { role: "user", text: clean }, { role: "assistant", text: result.reply }]);
-    if (result.intent) { setIntent(result.intent); setPaymentTx(null); }
+    if (!clean || assistantBusy) return;
     setInput("");
     setActive("Overview");
+    setAssistantBusy(true);
+    setMessages(current => [...current, { role: "user", text: clean }]);
+    try {
+      const response = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: clean, history: messages.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+      });
+      const data = await response.json() as {
+        reply?: string;
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null };
+        mode?: "ai" | "fallback";
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "Assistant request failed.");
+      setMessages(current => [...current, { role: "assistant", text: data.reply || "I couldn't produce a useful response. Please try rephrasing that." }]);
+      const parsed = data.intent;
+      if (parsed?.action === "transfer" && parsed.amount && parsed.recipient && parsed.asset && SUPPORTED_DRAFT_ASSETS.has(parsed.asset.toUpperCase())) {
+        setIntent({
+          recipient: parsed.recipient,
+          amount: parsed.amount,
+          asset: parsed.asset.toUpperCase(),
+          network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
+          reason: parsed.purpose || "Not specified"
+        });
+        setPaymentTx(null);
+      } else if (parsed?.action === "transfer" && (parsed.amount || parsed.recipient)) {
+        setNotice("Sonus identified a possible transfer, but the draft is incomplete. Check the message and provide a valid amount, asset, recipient, and network.");
+      }
+      if (data.mode === "fallback") setNotice("AI mode is not configured yet. Sonus used its local assistant fallback; responses are limited.");
+    } catch (error) {
+      const result = buildReply(clean);
+      setMessages(current => [...current, { role: "assistant", text: result.reply + "\\n\\nThe AI service is unavailable right now, so this response came from the local fallback." }]);
+      if (result.intent) { setIntent(result.intent); setPaymentTx(null); }
+      setNotice("Assistant API unavailable: " + (error instanceof Error ? error.message : "request failed"));
+    } finally {
+      setAssistantBusy(false);
+    }
   }
 
   function startVoice() {
@@ -429,10 +465,10 @@ export default function SonusWorkspace() {
 
             <section className="ws-assistant-panel" id="ws-assistant">
               <div className="ws-assistant-heading"><div className="ws-assistant-symbol"><AudioLines size={19} /></div><div><span className="ws-eyebrow">YOUR PAYMENT INTELLIGENCE</span><h2>Ask Sonus<span className="ws-period">.</span></h2><p>Type it or say it. Start with what you want to do.</p></div><span className="ws-assistant-beta">PREVIEW</span></div>
-              <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}</div>
+              <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}{assistantBusy && <div className="ws-message assistant"><span className="ws-message-avatar"><AudioLines size={14} /></span><p>Thinking through your request…</p></div>}</div>
               {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? "Address format only · not verified" : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This is a draft until you choose “Send test payment” and approve the exact transaction in your wallet. Names are not resolved. Sending is restricted to native USDC on Arc Testnet."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }} disabled={balanceBusy || paymentTx?.status === "submitted" || paymentTx?.status === "pending"}>{paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction pending" : balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button>{intent.feeEstimate && EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && intent.asset === "USDC" && paymentTx?.status !== "submitted" && paymentTx?.status !== "pending" && paymentTx?.status !== "confirmed" && <button className="ws-send-payment-btn" onClick={() => void sendArcTestnetPayment()} disabled={balanceBusy}>{balanceBusy ? "Working…" : "Send test payment"} <ArrowUpRight size={13} /></button>}</div></div>}
               {paymentTx && <div className={"ws-payment-result " + paymentTx.status} role="status" aria-live="polite"><div><span className="ws-eyebrow">ON-CHAIN TRANSACTION</span><strong>{paymentTx.status === "confirmed" ? "Payment confirmed" : paymentTx.status === "failed" ? "Transaction failed" : paymentTx.status === "pending" ? "Confirmation pending" : "Transaction submitted"}</strong><small>{paymentTx.detail}</small><a href={"https://testnet.arcscan.app/tx/" + paymentTx.hash} target="_blank" rel="noreferrer">View transaction on Arcscan <ExternalLink size={12} /></a></div><button onClick={() => navigator.clipboard.writeText(paymentTx.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(paymentTx.hash))} aria-label="Copy transaction hash"><Copy size={15} /></button></div>}<div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
-              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim()}><Send size={16} /></button></form>
+              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
               <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
             </section>
             <footer className="ws-footer"><span>SONUS / PRIVATE WORKSPACE</span><span>BUILT FOR CLARITY. DESIGNED FOR CONTROL.</span><button onClick={() => setNotice("Dashboard prices and portfolio examples are illustrative. Native USDC transfers are connected on Arc Testnet only; swaps, bridges, and other networks are not live.")}>What’s live? <ExternalLink size={12} /></button></footer>
