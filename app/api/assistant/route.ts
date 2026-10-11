@@ -77,6 +77,40 @@ function localFallback(message: string): AssistantOutput {
   return { reply: "I can help plan transfers, swaps, bridges, wallet-safety checks, and crypto concepts. Live market data and most execution routes are not connected yet. What are you trying to accomplish?", intent: { action: "unknown", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "What are you trying to accomplish?" } };
 }
 
+function bindIntentToUserText(output: AssistantOutput, userText: string): AssistantOutput {
+  if (output.intent.action !== "transfer") return output;
+  const context = userText.toLowerCase();
+  if (!/\\b(send|pay|transfer)\\b/i.test(userText)) {
+    return { ...output, intent: { ...output.intent, action: "unknown", amount: null, asset: null, recipient: null, needsClarification: true, clarificationQuestion: "Are you asking to prepare a transfer, or just discussing one?" } };
+  }
+
+  const intent = { ...output.intent };
+  if (intent.recipient && !context.includes(intent.recipient.toLowerCase())) {
+    intent.recipient = null;
+    intent.needsClarification = true;
+    intent.clarificationQuestion = "Please provide the exact recipient address or name you want to use.";
+  }
+  if (intent.amount) {
+    const numbers = userText.match(/(?:\\$\\s*)?\\d+(?:\\.\\d+)?|\\.\\d+/g) ?? [];
+    if (!numbers.some(token => Number(token.replace(/^\\$\\s*/, "")) === Number(intent.amount))) {
+      intent.amount = null;
+      intent.needsClarification = true;
+      intent.clarificationQuestion = "What exact amount should I prepare?";
+    }
+  }
+  if (intent.asset && !new RegExp(`\\\\b${intent.asset}\\\\b`, "i").test(userText)) {
+    intent.asset = null;
+    intent.needsClarification = true;
+    intent.clarificationQuestion = "Which asset should I use? Please specify the token.";
+  }
+  if (intent.chain && intent.chain !== "unknown" && !context.includes(intent.chain.toLowerCase())) {
+    intent.chain = null;
+    intent.needsClarification = true;
+    intent.clarificationQuestion = "Which network should I use?";
+  }
+  return { ...output, intent };
+}
+
 function validateOutput(value: unknown): AssistantOutput {
   if (!value || typeof value !== "object") throw new Error("Assistant returned an invalid response.");
   const raw = value as Record<string, unknown>;
@@ -204,7 +238,7 @@ export async function POST(request: Request) {
     const result = await upstream.json() as { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
     const outputText = result.output?.flatMap(item => item.content ?? []).find(item => item.type === "output_text")?.text;
     if (!outputText) throw new Error("No structured output was returned.");
-    const parsed = validateOutput(JSON.parse(outputText));
+    const parsed = bindIntentToUserText(validateOutput(JSON.parse(outputText)), message);
     return NextResponse.json({ ...parsed, mode: "ai" });
   } catch (error) {
     console.error("Sonus assistant route error", error);
