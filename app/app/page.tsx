@@ -123,6 +123,8 @@ export default function SonusWorkspace() {
         setMarketError("");
       } catch (error) {
         if (!active || (error instanceof Error && error.name === "AbortError")) return;
+        setMarketQuotes([]);
+        setMarketUpdatedAt(null);
         setMarketError(error instanceof Error ? error.message : "Market data is unavailable.");
       } finally {
         if (active) setMarketLoading(false);
