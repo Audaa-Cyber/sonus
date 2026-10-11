@@ -526,7 +526,9 @@ export default function SonusWorkspace() {
       const fee = (Number(feeWhole) + Number(feeFraction) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const amountLabel = intent.amount + " USDC";
       const warningText = warnings.length ? "\n\nPreflight warnings:\n• " + warnings.join("\n• ") : "";
-      const confirmed = window.confirm("Review Arc Testnet payment\n\nFrom: " + from + "\nTo: " + intent.recipient + "\nAmount: " + amountLabel + "\nEstimated network fee: " + fee + " USDC" + warningText + "\n\nBasic parameter checks only; no phishing scanner or transaction simulation is connected. This will open your wallet for final approval. Only approve if these details are correct.");
+      const policyLines = [spendingRules.enabled ? "Per-payment limit: " + spendingRules.maxSingleUsdc + " USDC; daily cap: " + spendingRules.dailyCapUsdc + " USDC" : "Amount limits: off", spendingRules.enabled ? "Recorded today before this payment: " + spendingUsedToday.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC" : "", spendingRules.requireSavedRecipient ? "Saved-recipient rule: exact address matched" : "Saved-recipient rule: off"].filter(Boolean);
+      const policyText = "\n\nSonus local policy:\n• " + policyLines.join("\n• ");
+      const confirmed = window.confirm("Review Arc Testnet payment\n\nFrom: " + from + "\nTo: " + intent.recipient + "\nAmount: " + amountLabel + "\nEstimated network fee: " + fee + " USDC" + policyText + warningText + "\n\nBasic parameter checks only; no phishing scanner or transaction simulation is connected. This will open your wallet for final approval. Only approve if these details are correct.");
       if (!confirmed) { setNotice("Payment cancelled before opening the wallet. Nothing was sent."); return; }
       const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16), gas: "0x" + gasLimit.toString(16) }] }) as string;
       if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) throw new Error("Wallet returned an invalid transaction hash.");
