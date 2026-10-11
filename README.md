@@ -179,3 +179,10 @@ Run `npm test` to execute the built-in Node test suite. The suite covers request
 ## Server-side receipt reconciliation
 
 `GET /api/transactions/receipt?hash=<transaction-hash>` accepts a 32-byte transaction hash and only queries the fixed Arc Testnet RPC. When a receipt exists, the server also checks its block hash against the block currently returned at that height, and reports `pending`, `confirmed`, `failed`, `reorged`, or an error when the RPC data cannot be verified. Responses are not cached. A successful receipt is an observation from one RPC provider, not a guarantee of irreversible finality. An unavailable or malformed canonical block is not treated as confirmed. This endpoint does not persist records, discover transactions, or replace checking Arcscan.
+
+
+## Persistent transaction ledger foundation
+
+A Supabase SQL migration is included at `supabase/migrations/20261011000000_transaction_ledger.sql`. It creates a per-user transaction table, a duplicate guard on `(user, chain, transaction hash)`, query indexes, an `updated_at` trigger, and row-level security. Authenticated users can read their own rows and insert only `submitted` records; they cannot update or delete ledger rows directly. A trusted server-side reconciler can update receipt status using a server-only Supabase service role.
+
+**This is a schema foundation, not a live database integration.** Sonus does not yet initialize Supabase Auth or a database client, and the Activity UI still uses browser-local storage. Before enabling this ledger, create a Supabase project with Auth, apply the migration, configure server-only credentials, wire sign-in/session handling, and add a server route that verifies the signed-in user before inserting or reading rows. Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser code. Do not accept a client-supplied `user_id` as proof of identity; derive it from the verified Supabase session. Do not grant browser users update permissions for reconciliation fields.
