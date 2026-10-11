@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
-  Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command, Compass,
-  Copy, CreditCard, ExternalLink, Eye, EyeOff, Globe2, History, LayoutDashboard,
-  LockKeyhole, MessageCircle, Mic, MoreHorizontal, Plus, Search, Send, Settings2,
+  Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command,
+  Copy, ExternalLink, Eye, EyeOff, Globe2, History, LayoutDashboard,
+  LockKeyhole, Mic, MoreHorizontal, Plus, Search, Send, Settings2,
   ShieldCheck, Sparkles, TrendingDown, TrendingUp, Wallet, X, Zap
 } from "lucide-react";
 
