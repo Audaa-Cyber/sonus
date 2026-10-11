@@ -1,6 +1,6 @@
  "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
   Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command, Compass,
@@ -11,6 +11,9 @@ import {
 
 type Message = { role: "assistant" | "user"; text: string };
 type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string };
+type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
+declare global { interface Window { ethereum?: Eip1193Provider } }
+const ARC_TESTNET_CHAIN_ID = 5042002;
 
 const markets = [
   { symbol: "ETH", name: "Ethereum", price: "$3,842.19", change: "+2.84%", up: true, mark: "Ξ" },
@@ -68,6 +71,58 @@ export default function SonusWorkspace() {
   const [notice, setNotice] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const recognition = useRef<any>(null);
+
+  useEffect(() => {
+    const provider = window.ethereum;
+    if (!provider?.on) return;
+    const handleAccounts = (...args: unknown[]) => {
+      const accounts = args[0] as string[];
+      setWalletAddress(accounts?.[0] || null);
+    };
+    const handleChain = (...args: unknown[]) => {
+      const value = args[0];
+      const parsed = typeof value === "string" ? Number.parseInt(value, 16) : Number(value);
+      setWalletChainId(Number.isFinite(parsed) ? parsed : null);
+    };
+    provider.on("accountsChanged", handleAccounts);
+    provider.on("chainChanged", handleChain);
+    return () => {
+      provider.removeListener?.("accountsChanged", handleAccounts);
+      provider.removeListener?.("chainChanged", handleChain);
+    };
+  }, []);
+
+  async function connectWallet() {
+    if (walletAddress) {
+      setNotice("Wallet connected: " + walletAddress + (walletChainId ? " · Chain ID " + walletChainId : "") + ". Sonus has not requested a signature or moved funds.");
+      return;
+    }
+    const provider = window.ethereum;
+    if (!provider) {
+      setNotice("No browser wallet was detected. Install or open a compatible EVM wallet such as MetaMask, then reload Sonus.");
+      return;
+    }
+    setWalletBusy(true);
+    try {
+      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
+      const chain = await provider.request({ method: "eth_chainId" }) as string;
+      const parsedChain = Number.parseInt(chain, 16);
+      setWalletAddress(accounts?.[0] || null);
+      setWalletChainId(Number.isFinite(parsedChain) ? parsedChain : null);
+      setNotice(accounts?.[0] ? "Wallet connected. Sonus can read your public address and network. No transaction has been signed or sent." : "The wallet did not return an account.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Wallet connection was cancelled or failed.";
+      setNotice(message.toLowerCase().includes("user rejected") ? "Wallet connection cancelled. Nothing was signed." : "Could not connect wallet: " + message);
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
+  function disconnectWalletView() {
+    setWalletAddress(null);
+    setWalletChainId(null);
+    setNotice("Wallet disconnected from this Sonus view. To revoke site access completely, manage connected sites in your wallet.");
+  }
 
   const sectionSubtitle = useMemo(() => ({
     Overview: "Your money, in context.",
@@ -148,7 +203,7 @@ export default function SonusWorkspace() {
           ].map(({ label, icon: Icon }) => <button key={label} className={active === label ? "ws-nav-item active" : "ws-nav-item"} onClick={() => navigate(label)}><Icon size={17} /><span>{label}</span>{["Bridge", "Stake"].includes(label) && <span className="ws-soon">SOON</span>}</button>)}
         </nav>
         <div className="ws-sidebar-bottom">
-          <div className="ws-network-status"><span className="ws-status-dot" /><div><strong>Arc testnet</strong><small>Preview environment</small></div><MoreHorizontal size={16} /></div>
+          <div className="ws-network-status"><span className="ws-status-dot" /><div><strong>{walletChainId === ARC_TESTNET_CHAIN_ID ? "Arc testnet" : walletChainId ? "Chain " + walletChainId : "Wallet not connected"}</strong><small>{walletAddress ? walletChainId === ARC_TESTNET_CHAIN_ID ? "Connected · testnet" : "Connected · network unverified" : "Connect to begin"}</small></div><MoreHorizontal size={16} /></div>
           <button className="ws-nav-item" onClick={() => navigate("Settings")}><Settings2 size={17} /><span>Settings</span></button>
           <button className="ws-help-link" onClick={() => setNotice("Sonus V1 preview. Wallet connections and transaction execution are not enabled yet.")}><CircleHelp size={16} /> Help & feedback <ArrowUpRight size={13} /></button>
           <div className="ws-profile"><div className="ws-avatar">O</div><div><strong>Offline</strong><small>Personal workspace</small></div><MoreHorizontal size={17} /></div>
@@ -162,7 +217,7 @@ export default function SonusWorkspace() {
             <button className="ws-icon-btn" aria-label="Search" onClick={() => setSearchOpen(v => !v)}><Search size={17} /></button>
             <button className="ws-icon-btn" aria-label="Notifications" onClick={() => setNotice("You’re all caught up.")}><Bell size={17} /><i /></button>
             <span className="ws-top-divider" />
-            <button className="ws-connect-btn" onClick={() => setNotice("Wallet connection will be enabled after the wallet adapter and network configuration are integrated.")}><Wallet size={15} /> Connect wallet <ArrowUpRight size={13} /></button>
+            <button className="ws-connect-btn" onClick={walletAddress ? disconnectWalletView : connectWallet} disabled={walletBusy}><Wallet size={15} /> {walletBusy ? "Connecting…" : walletAddress ? walletAddress.slice(0, 6) + "…" + walletAddress.slice(-4) : "Connect wallet"} {walletAddress ? <X size={13} /> : <ArrowUpRight size={13} />}</button>
           </div>
         </header>
 
@@ -216,7 +271,7 @@ export default function SonusWorkspace() {
             <section className="ws-assistant-panel" id="ws-assistant">
               <div className="ws-assistant-heading"><div className="ws-assistant-symbol"><AudioLines size={19} /></div><div><span className="ws-eyebrow">YOUR PAYMENT INTELLIGENCE</span><h2>Ask Sonus<span className="ws-period">.</span></h2><p>Type it or say it. Start with what you want to do.</p></div><span className="ws-assistant-beta">PREVIEW</span></div>
               <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}</div>
-              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>RECIPIENT</small><strong>{intent.recipient}</strong></div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><strong>{intent.network}</strong></div><div><small>NOTE</small><strong>{intent.reason}</strong></div></div><p><LockKeyhole size={13} /> This is a draft only. Wallet connection, address resolution, quotes, and signing are not active.</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("No transaction was sent. Wallet execution is not enabled in this preview."); setIntent(null); }}>Dismiss draft</button><button onClick={() => setNotice("Transaction execution is disabled in this preview. No funds have moved.")}>Review details <ArrowRight size={13} /></button></div></div>}
+              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>RECIPIENT</small><strong>{intent.recipient}</strong></div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><strong>{intent.network}</strong></div><div><small>NOTE</small><strong>{intent.reason}</strong></div></div><p><LockKeyhole size={13} /> This is a draft only. Address resolution, quotes, and transaction signing are not active. Wallet connection alone never authorizes a payment.</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("No transaction was sent. Wallet execution is not enabled in this preview."); setIntent(null); }}>Dismiss draft</button><button onClick={() => setNotice("Transaction execution is disabled in this preview. No funds have moved.")}>Review details <ArrowRight size={13} /></button></div></div>}
               <div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
               <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim()}><Send size={16} /></button></form>
               <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
