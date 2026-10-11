@@ -41,6 +41,31 @@ function isRateLimited(request: Request): boolean {
   return current.count > MAX_REQUESTS_PER_WINDOW;
 }
 
+async function getLiveMarketSummary(): Promise<string | null> {
+  try {
+    const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum%2Csolana%2Cbitcoin%2Cusd-coin&vs_currencies=usd&include_24hr_change=true", {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(6_000),
+      next: { revalidate: 60 }
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as Record<string, { usd?: number; usd_24h_change?: number }>;
+    const assets = [
+      ["BTC", "bitcoin"], ["ETH", "ethereum"], ["SOL", "solana"], ["USDC", "usd-coin"]
+    ] as const;
+    const rows = assets.flatMap(([symbol, id]) => {
+      const quote = data[id];
+      if (typeof quote?.usd !== "number" || !Number.isFinite(quote.usd) || typeof quote.usd_24h_change !== "number" || !Number.isFinite(quote.usd_24h_change)) return [];
+      const price = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: quote.usd >= 100 ? 2 : quote.usd >= 1 ? 4 : 6 }).format(quote.usd);
+      const change = (quote.usd_24h_change > 0 ? "+" : "") + quote.usd_24h_change.toFixed(2) + "%";
+      return [`${symbol}: ${price} (${change} over 24h)`];
+    });
+    return rows.length ? "Live market snapshot from CoinGecko (retrieved just now; 24-hour change): " + rows.join("; ") + ". Prices move quickly; verify before trading." : null;
+  } catch {
+    return null;
+  }
+}
+
 function localFallback(message: string): AssistantOutput {
   const text = message.trim();
   const isTransfer = /\b(send|pay|transfer)\b/i.test(text);
@@ -159,7 +184,15 @@ export async function POST(request: Request) {
   if (message.length > 2000) return NextResponse.json({ error: "Message is too long. Keep it under 2,000 characters." }, { status: 413 });
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return NextResponse.json({ ...localFallback(message), mode: "fallback" });
+  if (!apiKey) {
+    const fallback = localFallback(message);
+    if (fallback.intent.action === "market") {
+      const marketSummary = await getLiveMarketSummary();
+      if (marketSummary) fallback.reply = marketSummary;
+      else fallback.reply += " Live market data could not be retrieved just now.";
+    }
+    return NextResponse.json({ ...fallback, mode: "fallback" });
+  }
 
   const history = Array.isArray(data.history)
     ? data.history.slice(-8).flatMap((item) => {
@@ -212,7 +245,7 @@ export async function POST(request: Request) {
           "Only use action transfer when the user clearly requests sending, paying, or transferring. Never convert advice or hypotheticals into an execution request.",
           "Allowed assets: USDC, USDT, ETH, SOL, BTC. Allowed chain values: Arc Testnet, Ethereum, Arbitrum, Base, Solana, unknown. Use unknown when not explicitly clear.",
           "Sonus currently supports only native USDC transfers on Arc Testnet. Other assets and chains may be discussed or drafted but must never be represented as executable.",
-          "Live market prices, full portfolio balances, swap quotes, bridges, staking, and external wallet identity resolution are not connected unless the user explicitly supplies evidence in the conversation.",
+          "Full portfolio balances, swap quotes, bridges, staking, and external wallet identity resolution are not connected. For market requests, the server may append a live CoinGecko price snapshot only when the provider responds successfully.",
           "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise."
         ].join("\n"),
         input: [
@@ -239,6 +272,11 @@ export async function POST(request: Request) {
     const outputText = result.output?.flatMap(item => item.content ?? []).find(item => item.type === "output_text")?.text;
     if (!outputText) throw new Error("No structured output was returned.");
     const parsed = bindIntentToUserText(validateOutput(JSON.parse(outputText)), message);
+    if (parsed.intent.action === "market") {
+      const marketSummary = await getLiveMarketSummary();
+      if (marketSummary) parsed.reply = marketSummary;
+      else parsed.reply += " Live market data could not be retrieved just now, so I can't verify current prices.";
+    }
     return NextResponse.json({ ...parsed, mode: "ai" });
   } catch (error) {
     console.error("Sonus assistant route error", error);
