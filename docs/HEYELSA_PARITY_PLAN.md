@@ -60,11 +60,11 @@ Each feature needs a provider adapter, server-side validation, loading/error/emp
 - Show the exact destination, chain, asset contract/native asset, amount, fee range, and relevant warnings before wallet authorization.
 - Handle rejected, replaced, dropped, reverted, pending, confirmed, and receipt-timeout states without encouraging duplicate sends.
 
-### 6. Swaps — Circle App Kit selected
-- Use Circle's App Kit Swap integration as the intended provider. Do not silently fall back to 0x or LI.FI.
-- Circle's current App Kit documentation describes Swap as server-side only today. It requires a server-side wallet adapter and a Circle API/Kit key; the current Sonus browser-wallet flow is not yet compatible with swap execution.
-- Arc Testnet swap coverage is limited to USDC, EURC, and cirBTC, and testnet liquidity can be thin. Check the current Circle supported-chain/token matrix before exposing any pair.
-- Before enabling execution, solve the wallet model transparently without asking users to submit private keys or using a Sonus-owned wallet to trade on a user's behalf without explicit disclosure and consent.
+### 6. Swaps — Arc/Circle first-party path under verification
+- Sonus's preference is an Arc/Circle first-party swap path. Do not silently fall back to 0x or LI.FI.
+- Public Arc App Kit docs currently demonstrate cross-chain USDC bridging; a supported same-chain first-party swap API has not been verified. Arc Portal's FAQ says its swap token availability is sourced by LI.FI, so that Portal routing must not be misrepresented as a Circle-owned swap provider.
+- Keep live quotes and execution disabled until an official Arc/Circle first-party swap API, supported chains/tokens, and user-authorization model are verified.
+- Never ask users to submit private keys or use a Sonus-controlled wallet to trade on a user's behalf.
 - Add quote preview with estimated output, minimum received, fees, gas, approval requirements, quote expiry, and slippage controls. Never fabricate an estimate when Circle cannot return one.
 - Keep quote and execution separate; require explicit human approval of the exact transaction and test provider failure, unsupported pairs, quote expiry, and receipt recovery.
 
@@ -133,7 +133,7 @@ Treat these as candidate integrations to evaluate, not commitments. Pricing, fre
 | RPC / node access | Arc's official RPC for Arc Testnet; Alchemy, QuickNode, or another provider for supported production chains | Reads, simulation support where available, broadcast/receipts | Chain coverage differs; Arc Testnet support must be verified separately |
 | Portfolio and token balances | Alchemy Portfolio APIs; compare with other multi-chain indexers | Token balances, metadata, transactions across supported chains | Partial failures and chain gaps; API key required for production usage |
 | Market prices and metadata | CoinGecko API; optionally DefiLlama for protocol/yield context | Prices, token metadata, market data | Rate limits, attribution/terms, token mapping quality |
-| EVM swaps | Circle App Kit Swap | Same-chain swap routing and transaction workflow on supported chains | Server-side wallet adapter required today; Arc Testnet pair/liquidity support is limited; current external browser-wallet flow cannot execute through it yet |
+| EVM swaps | Arc/Circle first-party API (to verify) | Preferred first-party swap path, if officially supported | Public App Kit docs reviewed so far show bridging, not a verified same-chain swap API; do not use Portal's LI.FI routing as if it were Circle-owned |
 | Cross-chain routes / bridges | Circle CCTP / App Kit Bridge | Native USDC cross-chain transfer via Circle infrastructure | Supported chains, transfer mode, destination completion, and fees must be checked |
 | EVM transaction simulation | Tenderly Simulation API; also evaluate GoPlus simulation/security APIs | Dry-run execution and decoded effects where supported | Verify Arc Testnet support and coverage before depending on it |
 | Token/address/approval security | GoPlus Security APIs; consider Blockaid or another commercial scanner | Token, address, approval, phishing and transaction-risk signals | Not a safety guarantee; coverage differs by chain |
@@ -153,7 +153,7 @@ Treat these as candidate integrations to evaluate, not commitments. Pricing, fre
 3. RPC: Arc Testnet for current test flow, plus a production-chain RPC provider after chain choice.
 4. Portfolio: one indexer with explicit partial-failure handling.
 5. Prices: one market-data provider.
-6. Swap: Circle App Kit selected; enable only after wallet-model compatibility and supported-chain validation.
+6. Swap: verify an official Arc/Circle first-party same-chain swap API before implementing; keep execution disabled until verified.
 7. Bridge: Circle CCTP / App Kit Bridge for supported USDC routes.
 8. Security: GoPlus plus transaction simulation where supported.
 9. Identity: ENS for ENS names, with a resolver interface for other namespaces.
