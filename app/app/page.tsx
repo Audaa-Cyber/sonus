@@ -11,6 +11,7 @@ import {
 
 type Message = { role: "assistant" | "user"; text: string };
 type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string };
+type WalletBalances = { native: string | null; usdc: string | null; status: string; updatedAt: number | null };
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
@@ -75,6 +76,8 @@ export default function SonusWorkspace() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
+  const [balanceBusy, setBalanceBusy] = useState(false);
+  const [walletBalances, setWalletBalances] = useState<WalletBalances>({ native: null, usdc: null, status: "Not loaded", updatedAt: null });
   const recognition = useRef<any>(null);
 
   useEffect(() => {
@@ -83,11 +86,13 @@ export default function SonusWorkspace() {
     const handleAccounts = (...args: unknown[]) => {
       const accounts = args[0] as string[];
       setWalletAddress(accounts?.[0] || null);
+      setWalletBalances({ native: null, usdc: null, status: accounts?.[0] ? "Refresh required" : "Not connected", updatedAt: null });
     };
     const handleChain = (...args: unknown[]) => {
       const value = args[0];
       const parsed = typeof value === "string" ? Number.parseInt(value, 16) : Number(value);
       setWalletChainId(Number.isFinite(parsed) ? parsed : null);
+      setWalletBalances({ native: null, usdc: null, status: "Network changed · refresh required", updatedAt: null });
     };
     provider.on("accountsChanged", handleAccounts);
     provider.on("chainChanged", handleChain);
@@ -114,6 +119,7 @@ export default function SonusWorkspace() {
       const parsedChain = Number.parseInt(chain, 16);
       setWalletAddress(accounts?.[0] || null);
       setWalletChainId(Number.isFinite(parsedChain) ? parsedChain : null);
+      setWalletBalances({ native: null, usdc: null, status: "Connected · balance not loaded", updatedAt: null });
       setNotice(accounts?.[0] ? "Wallet connected. Sonus can read your public address and network. No transaction has been signed or sent." : "The wallet did not return an account.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Wallet connection was cancelled or failed.";
@@ -123,9 +129,62 @@ export default function SonusWorkspace() {
     }
   }
 
+
+  async function refreshWalletBalances() {
+    const provider = window.ethereum;
+    if (!provider || !walletAddress) {
+      setNotice("Connect a browser wallet before reading balances.");
+      return;
+    }
+    setBalanceBusy(true);
+    setWalletBalances(current => ({ ...current, status: "Reading wallet…" }));
+    try {
+      const chainValue = await provider.request({ method: "eth_chainId" }) as string;
+      const chainId = Number.parseInt(chainValue, 16);
+      if (chainId !== ARC_TESTNET_CHAIN_ID) {
+        setWalletChainId(Number.isFinite(chainId) ? chainId : null);
+        setWalletBalances({ native: null, usdc: null, status: "Switch to Arc Testnet to read this balance.", updatedAt: null });
+        return;
+      }
+      const accountValue = await provider.request({ method: "eth_accounts" }) as string[];
+      const account = accountValue?.[0];
+      if (!account || account.toLowerCase() !== walletAddress.toLowerCase()) {
+        setWalletBalances({ native: null, usdc: null, status: "Wallet account changed. Reconnect and retry.", updatedAt: null });
+        return;
+      }
+      const nativeHex = await provider.request({ method: "eth_getBalance", params: [account, "latest"] }) as string;
+      const nativeWei = BigInt(nativeHex);
+      const nativeBalance = (Number(nativeWei / 1000000000000n) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      let usdc: string | null = null;
+      const tokenAddress = process.env.NEXT_PUBLIC_ARC_TESTNET_USDC_ADDRESS;
+      if (tokenAddress && EVM_ADDRESS_RE.test(tokenAddress)) {
+        const paddedAddress = account.slice(2).toLowerCase().padStart(64, "0");
+        const data = "0x70a08231" + paddedAddress;
+        const raw = await provider.request({ method: "eth_call", params: [{ to: tokenAddress, data }, "latest"] }) as string;
+        const tokenUnits = BigInt(raw);
+        let decimals = 6;
+        try {
+          const rawDecimals = await provider.request({ method: "eth_call", params: [{ to: tokenAddress, data: "0x313ce567" }, "latest"] }) as string;
+          const parsedDecimals = Number(BigInt(rawDecimals));
+          if (Number.isInteger(parsedDecimals) && parsedDecimals >= 0 && parsedDecimals <= 18) decimals = parsedDecimals;
+        } catch { /* use the conventional USDC precision only when the configured token omits decimals */ }
+        const divisor = 10n ** BigInt(decimals);
+        usdc = (Number(tokenUnits / (divisor / (10n ** BigInt(Math.min(decimals, 6))))) / (10 ** Math.min(decimals, 6))).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      }
+      setWalletChainId(chainId);
+      setWalletBalances({ native: nativeBalance, usdc, status: tokenAddress ? "Live on-chain reads · Arc Testnet" : "Live native balance · USDC contract not configured", updatedAt: Date.now() });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Balance read failed.";
+      setWalletBalances({ native: null, usdc: null, status: "Could not read balance: " + message, updatedAt: null });
+    } finally {
+      setBalanceBusy(false);
+    }
+  }
+
   function disconnectWalletView() {
     setWalletAddress(null);
     setWalletChainId(null);
+    setWalletBalances({ native: null, usdc: null, status: "Not connected", updatedAt: null });
     setNotice("Wallet disconnected from this Sonus view. To revoke site access completely, manage connected sites in your wallet.");
   }
 
@@ -240,7 +299,8 @@ export default function SonusWorkspace() {
               <section className="ws-balance-panel">
                 <div className="ws-panel-top"><span>TOTAL PORTFOLIO VALUE</span><button onClick={() => setBalanceVisible(v => !v)} aria-label={balanceVisible ? "Hide balance" : "Show balance"}>{balanceVisible ? <Eye size={16} /> : <EyeOff size={16} />}</button></div>
                 <div className="ws-balance-number">{balanceVisible ? "$24,680" : "••••••"}<span>.52</span><span className="ws-balance-usd"> USD</span></div>
-                <div className="ws-balance-change"><span><TrendingUp size={14} /> +$1,284.30 (5.49%)</span><small>Past 30 days</small></div>
+                <div className="ws-balance-change"><span><TrendingUp size={14} /> +$1,284.30 (5.49%)</span><small>Past 30 days · illustrative</small></div>
+                {walletAddress && <div className="ws-chain-balance"><div><span>ARC TESTNET NATIVE BALANCE</span><strong>{walletBalances.native === null ? "—" : walletBalances.native + " ARC"}</strong></div><div><span>USDC BALANCE</span><strong>{walletBalances.usdc === null ? "Not configured" : walletBalances.usdc + " USDC"}</strong></div><button onClick={refreshWalletBalances} disabled={balanceBusy}>{balanceBusy ? "Reading…" : "Refresh on-chain balances"} <ArrowRight size={12} /></button><small>{walletBalances.status}{walletBalances.updatedAt ? " · " + new Date(walletBalances.updatedAt).toLocaleTimeString() : ""}</small></div>}
                 <div className="ws-chart" aria-label="Illustrative portfolio performance chart">
                   <div className="ws-chart-grid"><i /><i /><i /><i /></div>
                   <svg viewBox="0 0 720 135" preserveAspectRatio="none" role="img" aria-label="Illustrative upward portfolio line"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#a8d7c4" stopOpacity=".2" /><stop offset="100%" stopColor="#a8d7c4" stopOpacity="0" /></linearGradient></defs><path d="M0 108 C24 104 32 88 52 93 S87 108 108 86 S139 75 160 82 S187 55 210 66 S245 83 266 58 S301 70 323 52 S359 68 380 41 S418 58 439 45 S471 60 495 35 S529 47 548 29 S581 49 603 22 S642 38 661 17 S696 23 720 7 L720 135 L0 135Z" fill="url(#chartFill)" /><path d="M0 108 C24 104 32 88 52 93 S87 108 108 86 S139 75 160 82 S187 55 210 66 S245 83 266 58 S301 70 323 52 S359 68 380 41 S418 58 439 45 S471 60 495 35 S529 47 548 29 S581 49 603 22 S642 38 661 17 S696 23 720 7" fill="none" stroke="#a8d7c4" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg>
