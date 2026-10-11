@@ -1,0 +1,230 @@
+ "use client";
+
+import { useMemo, useRef, useState } from "react";
+import {
+  Activity, ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
+  Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command, Compass,
+  Copy, CreditCard, ExternalLink, Eye, EyeOff, Globe2, History, LayoutDashboard,
+  LockKeyhole, MessageCircle, Mic, MoreHorizontal, Plus, Search, Send, Settings2,
+  ShieldCheck, Sparkles, TrendingDown, TrendingUp, Wallet, X, Zap
+} from "lucide-react";
+
+type Message = { role: "assistant" | "user"; text: string };
+type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string };
+
+const markets = [
+  { symbol: "ETH", name: "Ethereum", price: "$3,842.19", change: "+2.84%", up: true, mark: "Ξ" },
+  { symbol: "SOL", name: "Solana", price: "$182.46", change: "+5.21%", up: true, mark: "◎" },
+  { symbol: "BTC", name: "Bitcoin", price: "$108,420.00", change: "-0.74%", up: false, mark: "₿" },
+  { symbol: "USDC", name: "USD Coin", price: "$1.00", change: "0.01%", up: true, mark: "$" },
+];
+
+const activity = [
+  { icon: ArrowUpRight, title: "Sent to Maya", detail: "Today, 10:42 AM · Arc", amount: "− 125.00 USDC", kind: "sent" },
+  { icon: ArrowDownLeft, title: "Received from Daniel", detail: "Yesterday, 4:18 PM · Ethereum", amount: "+ 0.42 ETH", kind: "received" },
+  { icon: ArrowLeftRight, title: "Swap USDC → SOL", detail: "Oct 08, 2026 · Solana", amount: "− 250.00 USDC", kind: "swap" },
+];
+
+const starters = [
+  { icon: ArrowUpRight, label: "Send money", prompt: "Prepare to send 25 USDC to Alex for lunch" },
+  { icon: ArrowLeftRight, label: "Swap tokens", prompt: "Help me swap 100 USDC for SOL" },
+  { icon: ChartNoAxesCombined, label: "Market check", prompt: "Give me a quick crypto market overview" },
+  { icon: ShieldCheck, label: "Check a wallet", prompt: "What should I check before sending crypto to a new address?" },
+];
+
+function buildReply(input: string): { reply: string; intent?: Intent } {
+  const text = input.trim();
+  const send = /\b(send|pay|transfer)\b/i.test(text);
+  if (send) {
+    const amountMatch = text.match(/(?:\$\s*)?(\d+(?:\.\d+)?)\s*(usdc|usdt|eth|sol|usd)?/i);
+    const recipientMatch = text.match(/\b(?:to|for)\s+([a-z][a-z0-9_.-]*)/i);
+    const asset = (amountMatch?.[2] || "USDC").toUpperCase();
+    const amount = amountMatch?.[1] || "";
+    const recipient = recipientMatch?.[1] || "";
+    if (!amount || !recipient) {
+      return { reply: "I can help prepare that. Tell me the amount, the asset, and who should receive it. For example: “Send 25 USDC to Alex for lunch.”" };
+    }
+    const reasonMatch = text.match(/\bfor\s+(.+)$/i);
+    return {
+      reply: "I’ve organized the details into a draft. Confirm the recipient and network before you connect a wallet. This preview does not send funds.",
+      intent: { recipient, amount, asset, network: "Choose network", reason: reasonMatch?.[1] || "Not specified" }
+    };
+  }
+  if (/swap|exchange|trade/i.test(text)) return { reply: "I can help plan a swap. Choose the token you’re spending, the token you want, and your preferred network. Live quotes and execution are not connected in this preview." };
+  if (/market|price|trend|overview/i.test(text)) return { reply: "Market snapshot is illustrative in this build. ETH and SOL are shown as positive, while BTC is slightly down. Connect a market data provider before relying on live prices." };
+  if (/wallet|address|safe|risk|scam/i.test(text)) return { reply: "Before sending: verify the address through a trusted channel, check the network and asset, review the amount and fees, and start with a small test transfer if appropriate. Never share your recovery phrase." };
+  return { reply: "I can help you plan a transfer, think through a swap, review wallet safety, or explain a market concept. For any transaction, I’ll show the details for review first." };
+}
+
+export default function SonusWorkspace() {
+  const [active, setActive] = useState("Overview");
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([
+    { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
+  ]);
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const [listening, setListening] = useState(false);
+  const [balanceVisible, setBalanceVisible] = useState(true);
+  const [notice, setNotice] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const recognition = useRef<any>(null);
+
+  const sectionSubtitle = useMemo(() => ({
+    Overview: "Your money, in context.",
+    Portfolio: "A clearer view of what you hold.",
+    Activity: "Every move, in one place.",
+    Swap: "Plan an exchange with confidence.",
+    Bridge: "Move assets across networks.",
+    Stake: "Put eligible assets to work.",
+    Intelligence: "Signals, context, and wallet safety.",
+    Settings: "Make Sonus work your way."
+  } as Record<string, string>)[active] || "Your money, in context.", [active]);
+
+  function submitMessage(value = input) {
+    const clean = value.trim();
+    if (!clean) return;
+    const result = buildReply(clean);
+    setMessages(current => [...current, { role: "user", text: clean }, { role: "assistant", text: result.reply }]);
+    if (result.intent) setIntent(result.intent);
+    setInput("");
+    setActive("Overview");
+  }
+
+  function startVoice() {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setNotice("Voice input is not supported in this browser. Try a recent version of Chrome.");
+      return;
+    }
+    if (listening) {
+      recognition.current?.stop();
+      setListening(false);
+      return;
+    }
+    const engine = new SpeechRecognition();
+    engine.lang = "en-US";
+    engine.interimResults = false;
+    engine.maxAlternatives = 1;
+    engine.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      setInput(transcript);
+      setListening(false);
+      if (transcript) submitMessage(transcript);
+    };
+    engine.onerror = () => { setListening(false); setNotice("Could not capture speech. Check microphone permission and try again."); };
+    engine.onend = () => setListening(false);
+    recognition.current = engine;
+    setListening(true);
+    setNotice("Listening… speak your request.");
+    engine.start();
+  }
+
+  function navigate(label: string) {
+    setActive(label);
+    setIntent(null);
+  }
+
+  return (
+    <main className="ws-root">
+      <aside className="ws-sidebar">
+        <a href="/" className="ws-brand" aria-label="Sonus home">
+          <span className="ws-brand-mark"><i /><i /><i /></span><span>SONUS<span className="ws-brand-period">.</span></span>
+        </a>
+        <div className="ws-workspace-label">WORKSPACE <ChevronDown size={13} /></div>
+        <nav className="ws-nav" aria-label="Workspace navigation">
+          <p className="ws-nav-caption">YOUR SPACE</p>
+          {[
+            { label: "Overview", icon: LayoutDashboard },
+            { label: "Portfolio", icon: Wallet },
+            { label: "Activity", icon: History },
+          ].map(({ label, icon: Icon }) => <button key={label} className={active === label ? "ws-nav-item active" : "ws-nav-item"} onClick={() => navigate(label)}><Icon size={17} /><span>{label}</span>{label === "Activity" && <span className="ws-nav-count">3</span>}</button>)}
+          <p className="ws-nav-caption ws-nav-caption-gap">EXPLORE</p>
+          {[
+            { label: "Swap", icon: ArrowLeftRight },
+            { label: "Bridge", icon: Globe2 },
+            { label: "Stake", icon: Zap },
+            { label: "Intelligence", icon: Sparkles },
+          ].map(({ label, icon: Icon }) => <button key={label} className={active === label ? "ws-nav-item active" : "ws-nav-item"} onClick={() => navigate(label)}><Icon size={17} /><span>{label}</span>{["Bridge", "Stake"].includes(label) && <span className="ws-soon">SOON</span>}</button>)}
+        </nav>
+        <div className="ws-sidebar-bottom">
+          <div className="ws-network-status"><span className="ws-status-dot" /><div><strong>Arc testnet</strong><small>Preview environment</small></div><MoreHorizontal size={16} /></div>
+          <button className="ws-nav-item" onClick={() => navigate("Settings")}><Settings2 size={17} /><span>Settings</span></button>
+          <button className="ws-help-link" onClick={() => setNotice("Sonus V1 preview. Wallet connections and transaction execution are not enabled yet.")}><CircleHelp size={16} /> Help & feedback <ArrowUpRight size={13} /></button>
+          <div className="ws-profile"><div className="ws-avatar">O</div><div><strong>Offline</strong><small>Personal workspace</small></div><MoreHorizontal size={17} /></div>
+        </div>
+      </aside>
+
+      <section className="ws-main">
+        <header className="ws-topbar">
+          <div className="ws-breadcrumb"><span>Workspace</span><span className="ws-slash">/</span><strong>{active}</strong></div>
+          <div className="ws-top-actions">
+            <button className="ws-icon-btn" aria-label="Search" onClick={() => setSearchOpen(v => !v)}><Search size={17} /></button>
+            <button className="ws-icon-btn" aria-label="Notifications" onClick={() => setNotice("You’re all caught up.")}><Bell size={17} /><i /></button>
+            <span className="ws-top-divider" />
+            <button className="ws-connect-btn" onClick={() => setNotice("Wallet connection will be enabled after the wallet adapter and network configuration are integrated.")}><Wallet size={15} /> Connect wallet <ArrowUpRight size={13} /></button>
+          </div>
+        </header>
+
+        {searchOpen && <div className="ws-search-pop"><Search size={16} /><input autoFocus placeholder="Search assets, activity, or ask Sonus…" onKeyDown={e => { if (e.key === "Enter") { submitMessage((e.target as HTMLInputElement).value); setSearchOpen(false); } }} /><button onClick={() => setSearchOpen(false)} aria-label="Close search"><X size={15} /></button></div>}
+        {notice && <div className="ws-notice" role="status"><span>{notice}</span><button onClick={() => setNotice("")} aria-label="Dismiss notice"><X size={14} /></button></div>}
+
+        <div className="ws-content">
+          <div className="ws-page-heading">
+            <div><p className="ws-eyebrow"><span /> YOUR FINANCIAL OVERVIEW</p><h1>{active === "Overview" ? <>Good afternoon<span className="ws-period">.</span></> : active}<span className="ws-period">{active === "Overview" ? "" : "."}</span></h1><p>{sectionSubtitle}</p></div>
+            <div className="ws-date"><span className="ws-live-dot" /> SUNDAY, OCTOBER 11, 2026</div>
+          </div>
+
+          {active === "Overview" ? <>
+            <div className="ws-overview-grid">
+              <section className="ws-balance-panel">
+                <div className="ws-panel-top"><span>TOTAL PORTFOLIO VALUE</span><button onClick={() => setBalanceVisible(v => !v)} aria-label={balanceVisible ? "Hide balance" : "Show balance"}>{balanceVisible ? <Eye size={16} /> : <EyeOff size={16} />}</button></div>
+                <div className="ws-balance-number">{balanceVisible ? "$24,680" : "••••••"}<span>.52</span><span className="ws-balance-usd"> USD</span></div>
+                <div className="ws-balance-change"><span><TrendingUp size={14} /> +$1,284.30 (5.49%)</span><small>Past 30 days</small></div>
+                <div className="ws-chart" aria-label="Illustrative portfolio performance chart">
+                  <div className="ws-chart-grid"><i /><i /><i /><i /></div>
+                  <svg viewBox="0 0 720 135" preserveAspectRatio="none" role="img" aria-label="Illustrative upward portfolio line"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#a8d7c4" stopOpacity=".2" /><stop offset="100%" stopColor="#a8d7c4" stopOpacity="0" /></linearGradient></defs><path d="M0 108 C24 104 32 88 52 93 S87 108 108 86 S139 75 160 82 S187 55 210 66 S245 83 266 58 S301 70 323 52 S359 68 380 41 S418 58 439 45 S471 60 495 35 S529 47 548 29 S581 49 603 22 S642 38 661 17 S696 23 720 7 L720 135 L0 135Z" fill="url(#chartFill)" /><path d="M0 108 C24 104 32 88 52 93 S87 108 108 86 S139 75 160 82 S187 55 210 66 S245 83 266 58 S301 70 323 52 S359 68 380 41 S418 58 439 45 S471 60 495 35 S529 47 548 29 S581 49 603 22 S642 38 661 17 S696 23 720 7" fill="none" stroke="#a8d7c4" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg>
+                </div>
+                <div className="ws-chart-labels"><span>SEP 12</span><span>SEP 19</span><span>SEP 26</span><span>OCT 03</span><span>OCT 11</span></div>
+              </section>
+              <section className="ws-actions-panel">
+                <div className="ws-panel-top"><span>QUICK ACTIONS</span><span className="ws-mini-label">YOUR CALL</span></div>
+                <div className="ws-action-grid">
+                  <button onClick={() => { setInput("Prepare to send 25 USDC to Alex for lunch"); document.getElementById("ws-assistant-input")?.focus(); }}><span className="ws-action-icon"><ArrowUpRight size={18} /></span><strong>Send</strong><small>Transfer assets</small></button>
+                  <button onClick={() => navigate("Swap")}><span className="ws-action-icon"><ArrowLeftRight size={18} /></span><strong>Swap</strong><small>Exchange tokens</small></button>
+                  <button onClick={() => navigate("Bridge")}><span className="ws-action-icon"><Globe2 size={18} /></span><strong>Bridge</strong><small>Move networks</small></button>
+                  <button onClick={() => navigate("Portfolio")}><span className="ws-action-icon"><Plus size={18} /></span><strong>Receive</strong><small>Get an address</small></button>
+                </div>
+                <div className="ws-safety-note"><ShieldCheck size={16} /><span><strong>You’re in control.</strong> Every transaction should be reviewed before approval.</span></div>
+              </section>
+            </div>
+
+            <div className="ws-lower-grid">
+              <section className="ws-market-panel">
+                <div className="ws-section-heading"><div><h2>Market watch</h2><p>A quick read on selected assets</p></div><button className="ws-view-link" onClick={() => navigate("Intelligence")}>View intelligence <ArrowRight size={14} /></button></div>
+                <div className="ws-market-table"><div className="ws-table-head"><span>ASSET</span><span>PRICE</span><span>24H</span><span /></div>{markets.map(asset => <div className="ws-market-row" key={asset.symbol}><span className={"ws-coin ws-coin-" + asset.symbol.toLowerCase()}>{asset.mark}</span><div className="ws-asset-name"><strong>{asset.symbol}</strong><small>{asset.name}</small></div><strong className="ws-asset-price">{asset.price}</strong><span className={asset.up ? "ws-change up" : "ws-change down"}>{asset.up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{asset.change}</span><button className="ws-row-more" aria-label={"More about " + asset.symbol} onClick={() => { setInput("Give me a quick crypto market overview"); document.getElementById("ws-assistant-input")?.focus(); }}><ArrowUpRight size={14} /></button></div>)}</div>
+                <p className="ws-data-disclaimer"><Activity size={12} /> Illustrative data for UI preview. Prices and portfolio values are not live.</p>
+              </section>
+
+              <section className="ws-activity-panel">
+                <div className="ws-section-heading"><div><h2>Recent activity</h2><p>Your latest moves</p></div><button className="ws-icon-btn ws-subtle-icon" aria-label="Activity options" onClick={() => navigate("Activity")}><ArrowUpRight size={16} /></button></div>
+                <div className="ws-activity-list">{activity.map((item, index) => <div className="ws-activity-row" key={item.title}><span className={"ws-activity-icon " + item.kind}><item.icon size={15} /></span><div className="ws-activity-info"><strong>{item.title}</strong><small>{item.detail}</small></div><div className={"ws-activity-amount " + item.kind}>{item.amount}</div>{index < activity.length - 1 && <span className="ws-activity-divider" />}</div>)}</div>
+                <button className="ws-full-activity" onClick={() => navigate("Activity")}>View all activity <ArrowRight size={14} /></button>
+              </section>
+            </div>
+
+            <section className="ws-assistant-panel" id="ws-assistant">
+              <div className="ws-assistant-heading"><div className="ws-assistant-symbol"><AudioLines size={19} /></div><div><span className="ws-eyebrow">YOUR PAYMENT INTELLIGENCE</span><h2>Ask Sonus<span className="ws-period">.</span></h2><p>Type it or say it. Start with what you want to do.</p></div><span className="ws-assistant-beta">PREVIEW</span></div>
+              <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}</div>
+              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>RECIPIENT</small><strong>{intent.recipient}</strong></div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><strong>{intent.network}</strong></div><div><small>NOTE</small><strong>{intent.reason}</strong></div></div><p><LockKeyhole size={13} /> This is a draft only. Wallet connection, address resolution, quotes, and signing are not active.</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("No transaction was sent. Wallet execution is not enabled in this preview."); setIntent(null); }}>Dismiss draft</button><button onClick={() => setNotice("Transaction execution is disabled in this preview. No funds have moved.")}>Review details <ArrowRight size={13} /></button></div></div>}
+              <div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
+              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim()}><Send size={16} /></button></form>
+              <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
+            </section>
+            <footer className="ws-footer"><span>SONUS / PRIVATE WORKSPACE</span><span>BUILT FOR CLARITY. DESIGNED FOR CONTROL.</span><button onClick={() => setNotice("Sonus V1 is a functional interface preview. Live financial integrations are not yet connected.")}>What’s live? <ExternalLink size={12} /></button></footer>
+          </> : <section className="ws-placeholder-page"><div className="ws-placeholder-icon">{active === "Portfolio" ? <Wallet size={24} /> : active === "Activity" ? <History size={24} /> : active === "Intelligence" ? <Sparkles size={24} /> : active === "Settings" ? <Settings2 size={24} /> : <ArrowLeftRight size={24} />}</div><span className="ws-eyebrow">SONUS / V1 PREVIEW</span><h2>{active}<span className="ws-period">.</span></h2><p>{active === "Portfolio" ? "Your assets will appear here after wallet connections and live balance indexing are integrated." : active === "Activity" ? "Your confirmed transactions will appear here after wallet and chain indexing are connected." : active === "Swap" ? "Swap planning is part of the V1 direction. Live quotes, slippage checks, routing, and wallet signing still need integration." : active === "Bridge" ? "Cross-chain routes, bridge providers, fee estimates, and settlement tracking will be integrated here." : active === "Stake" ? "Staking opportunities, protocol risk information, and position tracking will appear here when supported integrations are selected." : active === "Intelligence" ? "A home for market context, wallet-risk signals, transaction explanations, and portfolio insights. Live data sources are not connected yet." : "Manage wallet connections, networks, permissions, privacy, and spending rules as those controls are implemented."}</p><div className="ws-placeholder-status"><span className="ws-status-dot" /> Interface scaffolded <span className="ws-status-separator">·</span> Integration pending</div><button className="ws-connect-btn" onClick={() => navigate("Overview")}><ArrowRight size={15} /> Back to overview</button></section>}
+        </div>
+      </section>
+    </main>
+  );
+}
