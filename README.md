@@ -80,6 +80,7 @@ Manual cases to verify locally:
 - Ask about recent payments or a saved payment note and verify the answer is based only on local Sonus records; the assistant API should not be called for these memory questions.
 - Enable spending guardrails, set a per-payment limit below the draft amount, and verify Sonus blocks before opening the wallet confirmation; then test a daily cap against recorded same-sender transactions.
 - Connect the intended wallet and verify Settings shows the recorded UTC-day total for that sender; failed records should not count toward the displayed total.
+- Enable the saved-recipient rule and attempt a payment to an address absent from Contacts; verify Sonus blocks before wallet confirmation. Add the exact address and verify the rule permits proceeding to the normal preflight.
 
 ## Saved recipient address book
 
@@ -138,9 +139,9 @@ The key is read only by the server route. Do not add it to client-side code, com
 
 ## Local spending guardrails
 
-The Settings page offers optional per-payment and daily recorded-spending limits for Arc Testnet native-USDC transfers. When enabled, Sonus checks these limits before opening the wallet confirmation flow. The daily total uses the UTC calendar day and counts non-failed records for the current sender that are present in the browser's capped local transaction history. Rules are saved under `sonus:spending-rules:v1` in local storage and are disabled by default.
+The Settings page offers optional per-payment and daily recorded-spending limits for Arc Testnet native-USDC transfers, plus an option to block recipients not in the local saved-contacts address book. When enabled, Sonus checks these limits before opening the wallet confirmation flow. The daily total uses the UTC calendar day and counts non-failed records for the current sender that are present in the browser's capped local transaction history. Rules are saved under `sonus:spending-rules:v1` in local storage and are disabled by default.
 
-These are client-side convenience checks, not secure wallet permissions or a production policy engine. Local storage can be modified or cleared, the history is capped at 100 records, and activity from other apps or devices is not included. Do not rely on this feature as the only control for valuable assets. Wallet confirmation and independent transaction review remain required.
+The saved-recipient check compares the exact destination address and does not verify the real-world identity behind a contact name. These are client-side convenience checks, not secure wallet permissions or a production policy engine. Local storage can be modified or cleared, the history is capped at 100 records, and activity from other apps or devices is not included. Do not rely on this feature as the only control for valuable assets. Wallet confirmation and independent transaction review remain required.
 
 ## Verification
 
