@@ -109,6 +109,7 @@ export default function SonusWorkspace() {
   const [swapCapabilities, setSwapCapabilities] = useState<SwapCapabilityResponse | null>(null);
   const [swapCapabilitiesError, setSwapCapabilitiesError] = useState("");
   const recognition = useRef<SpeechRecognitionLike | null>(null);
+  const paymentSubmissionLock = useRef(false);
 
   const visibleTransactions = transactionHistory.filter(item => {
     const query = historyQuery.trim().toLowerCase();
@@ -458,6 +459,8 @@ export default function SonusWorkspace() {
     const amountUnits6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
     if (amountUnits6 <= 0n) { setNotice("Enter an amount greater than zero."); return; }
     const value = amountUnits6 * 1000000000000n;
+    if (paymentSubmissionLock.current) { setNotice("A payment attempt is already in progress. Wait for its status before trying again."); return; }
+    paymentSubmissionLock.current = true;
     setBalanceBusy(true);
     let submittedHash: string | null = null;
     let transactionSender: string | null = null;
@@ -561,7 +564,7 @@ export default function SonusWorkspace() {
         setPaymentTx({ hash: submittedHash, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
       }
       setNotice("Payment was not confirmed as submitted: " + (error instanceof Error ? error.message : "wallet request failed") + ". Check your wallet and transaction history before retrying.");
-    } finally { setBalanceBusy(false); }
+    } finally { paymentSubmissionLock.current = false; setBalanceBusy(false); }
   }
 
   function saveContact(event: React.FormEvent<HTMLFormElement>) {
