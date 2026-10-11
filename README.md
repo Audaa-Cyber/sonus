@@ -78,7 +78,7 @@ The key is read only by the server route. Do not add it to client-side code, com
 
 - The model produces intent drafts and explanatory text only. It cannot send a transaction, resolve a name to a verified identity, fetch live balances, or claim a quote/simulation was performed.
 - Structured output is validated server-side before being returned to the UI.
-- The route limits message size and history length and applies a 25-second upstream timeout. Production deployment still needs per-user/IP rate limiting, usage budgets, authentication, request monitoring, and abuse protection.
+- The route limits request/message size and history length, applies a 25-second upstream timeout, and includes a basic in-memory limit of 30 requests per IP per minute. This limit is process-local and can reset or differ across serverless instances; it is not production-grade protection. Production still needs durable per-user/IP rate limiting, usage budgets, authentication, request monitoring, and abuse protection.
 - Do not treat model interpretation as authorization. The UI and wallet must continue to validate the exact transaction independently.
 
 ## Verification
