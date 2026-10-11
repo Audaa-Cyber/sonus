@@ -31,6 +31,7 @@ const markets = [
 ];
 type MarketQuote = { symbol: string; name: string; priceUsd: number; change24h: number };
 type MarketApiResponse = { assets?: MarketQuote[]; source?: string; updatedAt?: string; error?: string };
+type SwapCapabilityResponse = { provider?: { name?: string }; status?: "not_ready" | "ready"; quoteAvailable?: boolean; executionAvailable?: boolean; reason?: string; supportedEnvironment?: { arcTestnet?: { supportedTokens?: string[]; caveat?: string } } };
 
 function formatUsd(value: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: value >= 100 ? 2 : value >= 1 ? 4 : 6 }).format(value);
@@ -96,6 +97,8 @@ export default function SonusWorkspace() {
   const [marketError, setMarketError] = useState("");
   const [marketUpdatedAt, setMarketUpdatedAt] = useState<string | null>(null);
   const [marketRefreshNonce, setMarketRefreshNonce] = useState(0);
+  const [swapCapabilities, setSwapCapabilities] = useState<SwapCapabilityResponse | null>(null);
+  const [swapCapabilitiesError, setSwapCapabilitiesError] = useState("");
   const recognition = useRef<SpeechRecognitionLike | null>(null);
 
   const marketRows = markets.map(asset => {
@@ -107,6 +110,18 @@ export default function SonusWorkspace() {
       up: quote ? quote.change24h >= 0 : true
     };
   });
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/swap/capabilities", { cache: "no-store" })
+      .then(async response => {
+        const data = await response.json() as SwapCapabilityResponse;
+        if (!response.ok) throw new Error("Swap provider status is unavailable.");
+        if (active) { setSwapCapabilities(data); setSwapCapabilitiesError(""); }
+      })
+      .catch(error => { if (active) setSwapCapabilitiesError(error instanceof Error ? error.message : "Swap provider status is unavailable."); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -525,7 +540,7 @@ export default function SonusWorkspace() {
               <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
             </section>
             <footer className="ws-footer"><span>SONUS / PRIVATE WORKSPACE</span><span>BUILT FOR CLARITY. DESIGNED FOR CONTROL.</span><button onClick={() => setNotice("Dashboard prices and portfolio examples are illustrative. Native USDC transfers are connected on Arc Testnet only; swaps, bridges, and other networks are not live.")}>What’s live? <ExternalLink size={12} /></button></footer>
-          </> : <section className="ws-placeholder-page"><div className="ws-placeholder-icon">{active === "Portfolio" ? <Wallet size={24} /> : active === "Activity" ? <History size={24} /> : active === "Intelligence" ? <Sparkles size={24} /> : active === "Settings" ? <Settings2 size={24} /> : <ArrowLeftRight size={24} />}</div><span className="ws-eyebrow">SONUS / V1 PREVIEW</span><h2>{active}<span className="ws-period">.</span></h2><p>{active === "Portfolio" ? "Your assets will appear here after wallet connections and live balance indexing are integrated." : active === "Activity" ? "Your confirmed transactions will appear here after wallet and chain indexing are connected." : active === "Swap" ? "Swap planning is part of the V1 direction. Live quotes, slippage checks, routing, and wallet signing still need integration." : active === "Bridge" ? "Cross-chain routes, bridge providers, fee estimates, and settlement tracking will be integrated here." : active === "Stake" ? "Staking opportunities, protocol risk information, and position tracking will appear here when supported integrations are selected." : active === "Intelligence" ? "A home for market context, wallet-risk signals, transaction explanations, and portfolio insights. Live BTC, ETH, SOL, and USDC spot-price snapshots are connected; portfolio and wallet-risk intelligence still need integrations." : "Manage wallet connections, networks, permissions, privacy, and spending rules as those controls are implemented."}</p><div className="ws-placeholder-status"><span className="ws-status-dot" /> Interface scaffolded <span className="ws-status-separator">·</span> Integration pending</div><button className="ws-connect-btn" onClick={() => navigate("Overview")}><ArrowRight size={15} /> Back to overview</button></section>}
+          </> : <section className="ws-placeholder-page"><div className="ws-placeholder-icon">{active === "Portfolio" ? <Wallet size={24} /> : active === "Activity" ? <History size={24} /> : active === "Intelligence" ? <Sparkles size={24} /> : active === "Settings" ? <Settings2 size={24} /> : <ArrowLeftRight size={24} />}</div><span className="ws-eyebrow">SONUS / V1 PREVIEW</span><h2>{active}<span className="ws-period">.</span></h2><p>{active === "Portfolio" ? "Your assets will appear here after wallet connections and live balance indexing are integrated." : active === "Activity" ? "Your confirmed transactions will appear here after wallet and chain indexing are connected." : active === "Swap" ? (swapCapabilities?.reason || (swapCapabilitiesError ? "Circle App Kit status could not be loaded. No swap quote or execution is available." : "Checking Circle App Kit swap readiness…")) : active === "Bridge" ? "Cross-chain routes, bridge providers, fee estimates, and settlement tracking will be integrated here." : active === "Stake" ? "Staking opportunities, protocol risk information, and position tracking will appear here when supported integrations are selected." : active === "Intelligence" ? "A home for market context, wallet-risk signals, transaction explanations, and portfolio insights. Live BTC, ETH, SOL, and USDC spot-price snapshots are connected; portfolio and wallet-risk intelligence still need integrations." : "Manage wallet connections, networks, permissions, privacy, and spending rules as those controls are implemented."}</p><div className="ws-placeholder-status"><span className="ws-status-dot" /> {active === "Swap" ? (swapCapabilities?.quoteAvailable && swapCapabilities?.executionAvailable ? "Circle App Kit ready" : swapCapabilitiesError ? "Provider status unavailable" : "Circle App Kit selected · Not ready") : "Interface scaffolded"} <span className="ws-status-separator">·</span> {active === "Swap" ? (swapCapabilities?.supportedEnvironment?.arcTestnet?.supportedTokens ? "Arc Testnet pairs: " + swapCapabilities.supportedEnvironment.arcTestnet.supportedTokens.join(", ") : "No live quote") : "Integration pending"}</div><button className="ws-connect-btn" onClick={() => navigate("Overview")}><ArrowRight size={15} /> Back to overview</button></section>}
         </div>
       </section>
     </main>
