@@ -129,15 +129,15 @@ Official references: Arc App Kit bridge quickstart at `https://docs.arc.network/
 
 ## AI assistant API
 
-The workspace chat now calls a server-side `POST /api/assistant` route. When configured, it uses the OpenAI Responses API with a strict JSON schema so the UI receives a bounded reply and a typed intent draft. The model cannot sign transactions or call wallet methods; wallet signing remains in the browser and requires the wallet's own confirmation.
+The workspace chat calls a server-side `POST /api/assistant` route. It supports OpenAI-compatible Chat Completions providers using a configurable API root, model, and server-side key. The assistant returns a validated intent draft; it cannot sign transactions or call wallet methods. Wallet signing remains in the browser and requires the wallet's own confirmation.
 
 ### Configure locally
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `OPENAI_API_KEY` to your own key. Optionally set `OPENAI_MODEL`; the default is `gpt-4.1-mini`.
+2. Set `SONUS_AI_API_KEY`, `SONUS_AI_BASE_URL`, and `SONUS_AI_MODEL` for your provider. The base URL must be the API root, not the full `/chat/completions` endpoint. For example, OpenAI uses `https://api.openai.com/v1`; OpenRouter uses `https://openrouter.ai/api/v1`.
 3. Restart the dev server after changing environment variables.
 
-The key is read only by the server route. Do not add it to client-side code, commit `.env.local`, or paste it into chat. Without a key, the endpoint uses a clearly marked limited local fallback so the workspace still works. This fallback is not an LLM.
+The older `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` variables remain supported as fallbacks. Keep keys server-side only: never prefix them with `NEXT_PUBLIC_`, commit `.env.local`, or paste keys into chat. The configured provider must support the OpenAI-compatible Chat Completions endpoint and JSON mode. Without a key, the endpoint uses a clearly marked limited local fallback; that fallback is not an LLM.
 
 ### Current AI limits
 
