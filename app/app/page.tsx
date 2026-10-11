@@ -185,6 +185,34 @@ export default function SonusWorkspace() {
   }, []);
 
   useEffect(() => {
+    function syncSpendingRules(event: StorageEvent) {
+      if (event.key !== "sonus:spending-rules:v1") return;
+      if (!event.newValue) {
+        setSpendingRulesStorageError(true);
+        setNotice("Spending rules were removed in another tab. Sending is paused until you save the rules again.");
+        return;
+      }
+      try {
+        const parsed: unknown = JSON.parse(event.newValue);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid rule object");
+        const rules = parsed as { enabled?: unknown; maxSingleUsdc?: unknown; dailyCapUsdc?: unknown; requireSavedRecipient?: unknown };
+        const validLimit = (value: unknown) => typeof value === "string" && value.length <= 12 && /^\d+(?:\.\d{1,6})?$/.test(value) && Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1000000000;
+        if (typeof rules.enabled !== "boolean" || !validLimit(rules.maxSingleUsdc) || !validLimit(rules.dailyCapUsdc) || (rules.requireSavedRecipient !== undefined && typeof rules.requireSavedRecipient !== "boolean")) {
+          throw new Error("invalid rule values");
+        }
+        setSpendingRules({ enabled: rules.enabled, maxSingleUsdc: rules.maxSingleUsdc as string, dailyCapUsdc: rules.dailyCapUsdc as string, requireSavedRecipient: rules.requireSavedRecipient === true });
+        setSpendingRulesStorageError(false);
+        setNotice("Spending rules updated from another Sonus tab.");
+      } catch {
+        setSpendingRulesStorageError(true);
+        setNotice("Spending rules changed to an invalid configuration in another tab. Sending is paused until you save valid rules.");
+      }
+    }
+    window.addEventListener("storage", syncSpendingRules);
+    return () => window.removeEventListener("storage", syncSpendingRules);
+  }, []);
+
+  useEffect(() => {
     if (!spendingRulesReady) return;
     const validLimit = (value: string) => /^\d+(?:\.\d{1,6})?$/.test(value) && Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1000000000;
     if (!validLimit(spendingRules.maxSingleUsdc) || !validLimit(spendingRules.dailyCapUsdc)) return;
