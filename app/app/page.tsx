@@ -108,7 +108,8 @@ export default function SonusWorkspace() {
   const recognition = useRef<SpeechRecognitionLike | null>(null);
 
   const visibleTransactions = transactionHistory.filter(item => {
-    const query = historyQuery.trim().toLowerCase();\n    const matchesQuery = !query || [item.to, item.from, item.amount, item.asset, item.network, item.hash, item.note || ""].some(value => value.toLowerCase().includes(query));
+    const query = historyQuery.trim().toLowerCase();
+    const matchesQuery = !query || [item.to, item.from, item.amount, item.asset, item.network, item.hash, item.note || ""].some(value => value.toLowerCase().includes(query));
     const matchesStatus = historyStatusFilter === "all" || item.status === historyStatusFilter;
     return matchesQuery && matchesStatus;
   });
