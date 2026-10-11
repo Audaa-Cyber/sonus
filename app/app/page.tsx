@@ -15,6 +15,7 @@ type SavedContact = { id: string; name: string; address: string; createdAt: numb
 type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string; feeEstimate?: string };
 type WalletBalances = { native: string | null; status: string; updatedAt: number | null };
 type PaymentTx = { hash: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string };
+type StoredTransaction = { hash: string; from: string; to: string; amount: string; asset: string; network: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string; createdAt: number; updatedAt: number; blockNumber?: string };
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
@@ -37,12 +38,6 @@ type SwapCapabilityResponse = { provider?: { name?: string }; status?: "not_read
 function formatUsd(value: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: value >= 100 ? 2 : value >= 1 ? 4 : 6 }).format(value);
 }
-
-const activity = [
-  { icon: ArrowUpRight, title: "Sent to Maya", detail: "Today, 10:42 AM · Arc", amount: "− 125.00 USDC", kind: "sent" },
-  { icon: ArrowDownLeft, title: "Received from Daniel", detail: "Yesterday, 4:18 PM · Ethereum", amount: "+ 0.42 ETH", kind: "received" },
-  { icon: ArrowLeftRight, title: "Swap USDC → SOL", detail: "Oct 08, 2026 · Solana", amount: "− 250.00 USDC", kind: "swap" },
-];
 
 const starters = [
   { icon: ArrowUpRight, label: "Send money", prompt: "Prepare to send 25 USDC to Alex for lunch" },
@@ -96,6 +91,8 @@ export default function SonusWorkspace() {
   const [walletBusy, setWalletBusy] = useState(false);
   const [balanceBusy, setBalanceBusy] = useState(false);
   const [paymentTx, setPaymentTx] = useState<PaymentTx | null>(null);
+  const [transactionHistory, setTransactionHistory] = useState<StoredTransaction[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [walletBalances, setWalletBalances] = useState<WalletBalances>({ native: null, status: "Not loaded", updatedAt: null });
   const [marketQuotes, setMarketQuotes] = useState<MarketQuote[]>([]);
@@ -116,6 +113,31 @@ export default function SonusWorkspace() {
       up: quote ? quote.change24h >= 0 : true
     };
   });
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("sonus:transactions:v1");
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setTransactionHistory(parsed.filter((item): item is StoredTransaction => Boolean(item) && typeof item.hash === "string" && /^0x[a-fA-F0-9]{64}$/.test(item.hash) && typeof item.from === "string" && EVM_ADDRESS_RE.test(item.from) && typeof item.to === "string" && EVM_ADDRESS_RE.test(item.to) && typeof item.amount === "string" && typeof item.asset === "string" && typeof item.network === "string" && ["submitted", "confirmed", "failed", "pending"].includes(item.status) && typeof item.detail === "string" && typeof item.createdAt === "number" && typeof item.updatedAt === "number").slice(0, 100));
+        }
+      }
+    } catch {
+      setNotice("Saved transaction history could not be read from this browser.");
+    } finally {
+      setHistoryReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!historyReady) return;
+    try {
+      window.localStorage.setItem("sonus:transactions:v1", JSON.stringify(transactionHistory.slice(0, 100)));
+    } catch {
+      setNotice("Transaction history could not be saved. Check available browser storage.");
+    }
+  }, [transactionHistory, historyReady]);
 
   useEffect(() => {
     try {
@@ -317,6 +339,15 @@ export default function SonusWorkspace() {
     finally { setBalanceBusy(false); }
   }
 
+  function recordTransaction(update: Omit<StoredTransaction, "createdAt" | "updatedAt"> & { createdAt?: number }) {
+    const now = Date.now();
+    setTransactionHistory(current => {
+      const existing = current.find(item => item.hash.toLowerCase() === update.hash.toLowerCase());
+      const record: StoredTransaction = { ...update, createdAt: existing?.createdAt ?? update.createdAt ?? now, updatedAt: now };
+      return [record, ...current.filter(item => item.hash.toLowerCase() !== update.hash.toLowerCase())].slice(0, 100);
+    });
+  }
+
   async function sendArcTestnetPayment() {
     if (!intent) return;
     const provider = window.ethereum;
@@ -329,6 +360,8 @@ export default function SonusWorkspace() {
     if (amountUnits6 <= 0n) { setNotice("Enter an amount greater than zero."); return; }
     const value = amountUnits6 * 1000000000000n;
     setBalanceBusy(true);
+    let submittedHash: string | null = null;
+    let transactionSender: string | null = null;
     setNotice("Rechecking network, recipient, balance, and fees before wallet approval.");
     try {
       const chain = await provider.request({ method: "eth_chainId" }) as string;
@@ -336,6 +369,7 @@ export default function SonusWorkspace() {
       const accounts = await provider.request({ method: "eth_accounts" }) as string[];
       const from = accounts?.[0];
       if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before sending."); return; }
+      transactionSender = from;
       const preflightResponse = await fetch("/api/risk/preflight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -369,6 +403,8 @@ export default function SonusWorkspace() {
       if (!confirmed) { setNotice("Payment cancelled before opening the wallet. Nothing was sent."); return; }
       const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16), gas: "0x" + gasLimit.toString(16) }] }) as string;
       if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) throw new Error("Wallet returned an invalid transaction hash.");
+      submittedHash = hash;
+      recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "submitted", detail: "Submitted to Arc Testnet. Waiting for a transaction receipt." });
       setPaymentTx({ hash, status: "submitted", detail: "Submitted to your wallet. Waiting for Arc Testnet confirmation." });
       setNotice("Transaction submitted. Your wallet approved it; waiting for on-chain status.");
       for (let attempt = 0; attempt < 25; attempt++) {
@@ -376,15 +412,23 @@ export default function SonusWorkspace() {
         const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [hash] }) as { status?: string; blockNumber?: string } | null;
         if (receipt) {
           const success = receipt.status === "0x1";
-          setPaymentTx({ hash, status: success ? "confirmed" : "failed", detail: success ? "Confirmed in block " + (receipt.blockNumber ? BigInt(receipt.blockNumber).toString() : "unknown") + "." : "The network reported a failed transaction." });
+          const blockNumber = receipt.blockNumber ? BigInt(receipt.blockNumber).toString() : undefined;
+          const detail = success ? "Confirmed in block " + (blockNumber || "unknown") + "." : "The network reported a failed transaction.";
+          recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: success ? "confirmed" : "failed", detail, ...(blockNumber ? { blockNumber } : {}) });
+          setPaymentTx({ hash, status: success ? "confirmed" : "failed", detail });
           setNotice(success ? "Arc Testnet payment confirmed." : "Transaction was mined but failed. Check the explorer for details.");
           if (success) { setIntent(null); void refreshWalletBalances(); }
           return;
         }
       }
+      recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "pending", detail: "No receipt was found during the initial polling window. Check Arcscan before retrying." });
       setPaymentTx({ hash, status: "pending", detail: "Still pending. You can check the transaction on Arcscan." });
       setNotice("Transaction is still pending. Do not resend until you check its status.");
     } catch (error) {
+      if (submittedHash && transactionSender) {
+        recordTransaction({ hash: submittedHash, from: transactionSender, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
+        setPaymentTx({ hash: submittedHash, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
+      }
       setNotice("Payment was not confirmed as submitted: " + (error instanceof Error ? error.message : "wallet request failed") + ". Check your wallet and transaction history before retrying.");
     } finally { setBalanceBusy(false); }
   }
