@@ -3,6 +3,8 @@
 
 import "./workspace.css";import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
 import {
   Activity, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
   Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command,
@@ -88,6 +90,7 @@ export default function SonusWorkspace() {
   const [notice, setNotice] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Eip1193Provider | undefined>();
   const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
   const [balanceBusy, setBalanceBusy] = useState(false);
@@ -111,6 +114,10 @@ export default function SonusWorkspace() {
   const [swapCapabilitiesError, setSwapCapabilitiesError] = useState("");
   const recognition = useRef<SpeechRecognitionLike | null>(null);
   const paymentSubmissionLock = useRef(false);
+  const { address: connectedAddress, chainId: connectedChainId, isConnected, connector } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { switchChainAsync } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
 
   const visibleTransactions = transactionHistory.filter(item => {
     const query = historyQuery.trim().toLowerCase();
@@ -295,71 +302,52 @@ export default function SonusWorkspace() {
   }, [marketRefreshNonce]);
 
   useEffect(() => {
-    const provider = window.ethereum;
-    if (!provider?.on) return;
-    const handleAccounts = (...args: unknown[]) => {
-      const accounts = args[0] as string[];
-      setWalletAddress(accounts?.[0] || null);
-      setWalletBalances({ native: null, status: accounts?.[0] ? "Refresh required" : "Not connected", updatedAt: null });
-    };
-    const handleChain = (...args: unknown[]) => {
-      const value = args[0];
-      const parsed = typeof value === "string" ? Number.parseInt(value, 16) : Number(value);
-      setWalletChainId(Number.isFinite(parsed) ? parsed : null);
-      setWalletBalances({ native: null, status: "Network changed · refresh required", updatedAt: null });
-    };
-    provider.on("accountsChanged", handleAccounts);
-    provider.on("chainChanged", handleChain);
-    return () => {
-      provider.removeListener?.("accountsChanged", handleAccounts);
-      provider.removeListener?.("chainChanged", handleChain);
-    };
-  }, []);
+    let active = true;
+    setSelectedProvider(undefined);
+    if (!isConnected || !connector) return () => { active = false; };
+    void connector.getProvider()
+      .then(provider => { if (active) setSelectedProvider(provider as Eip1193Provider); })
+      .catch(() => {
+        if (active) {
+          setSelectedProvider(undefined);
+          setNotice("Could not access the selected wallet provider. Disconnect and choose the wallet again.");
+        }
+      });
+    return () => { active = false; };
+  }, [connector, isConnected]);
 
-  async function connectWallet() {
+  useEffect(() => {
+    const address = isConnected && connectedAddress ? connectedAddress : null;
+    const chain = isConnected && typeof connectedChainId === "number" ? connectedChainId : null;
+    setWalletAddress(address);
+    setWalletChainId(chain);
+    setWalletBalances({ native: null, status: address ? "Refresh required" : "Not connected", updatedAt: null });
+  }, [connectedAddress, connectedChainId, isConnected]);
+
+  function connectWallet() {
     if (walletAddress) {
       setNotice("Wallet connected: " + walletAddress + (walletChainId ? " · Chain ID " + walletChainId : "") + ". Sonus has not requested a signature or moved funds.");
       return;
     }
-    const provider = window.ethereum;
-    if (!provider) {
-      setNotice("No browser wallet was detected. Install or open a compatible EVM wallet such as MetaMask, then reload Sonus.");
+    if (!openConnectModal) {
+      setNotice("The wallet selector is unavailable. Refresh Sonus and try again.");
       return;
     }
-    setWalletBusy(true);
-    try {
-      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
-      const chain = await provider.request({ method: "eth_chainId" }) as string;
-      const parsedChain = Number.parseInt(chain, 16);
-      setWalletAddress(accounts?.[0] || null);
-      setWalletChainId(Number.isFinite(parsedChain) ? parsedChain : null);
-      setWalletBalances({ native: null, status: "Connected · balance not loaded", updatedAt: null });
-      setNotice(accounts?.[0] ? "Wallet connected. Sonus can read your public address and network. No transaction has been signed or sent." : "The wallet did not return an account.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Wallet connection was cancelled or failed.";
-      setNotice(message.toLowerCase().includes("user rejected") ? "Wallet connection cancelled. Nothing was signed." : "Could not connect wallet: " + message);
-    } finally {
-      setWalletBusy(false);
-    }
+    openConnectModal();
   }
 
-
   async function switchToArcTestnet() {
-    const provider = window.ethereum;
-    if (!provider) { setNotice("Open Sonus in a browser with an EVM wallet to switch networks."); return; }
+    if (!isConnected || !walletAddress) { setNotice("Choose and connect a wallet before switching networks."); return; }
     try {
-      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x4cef52" }] });
+      await switchChainAsync({ chainId: ARC_TESTNET_CHAIN_ID });
+      setNotice("Network switch requested for the selected wallet. Verify Arc Testnet is active before proceeding.");
     } catch (error) {
-      if ((error as { code?: number })?.code === 4902) {
-        try {
-          await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: "0x4cef52", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://rpc.testnet.arc.network"], blockExplorerUrls: ["https://testnet.arcscan.app"] }] });
-        } catch (addError) { setNotice("Could not add Arc Testnet: " + (addError instanceof Error ? addError.message : "request failed")); }
-      } else { setNotice("Network switch cancelled or failed: " + (error instanceof Error ? error.message : "request failed")); }
+      setNotice("Network switch cancelled or failed: " + (error instanceof Error ? error.message : "request failed") + ". No transaction was sent.");
     }
   }
 
   async function refreshWalletBalances() {
-    const provider = window.ethereum;
+    const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a browser wallet before reading balances."); return; }
     setBalanceBusy(true);
     setWalletBalances(current => ({ ...current, status: "Reading wallet…" }));
@@ -392,7 +380,7 @@ export default function SonusWorkspace() {
 
   async function estimatePaymentFee() {
     if (!intent) return;
-    const provider = window.ethereum;
+    const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before estimating a transaction fee."); return; }
     if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient is not a wallet address. Resolve it before estimating fees."); return; }
     if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only."); return; }
@@ -505,7 +493,7 @@ export default function SonusWorkspace() {
 
   async function sendArcTestnetPayment() {
     if (!intent) return;
-    const provider = window.ethereum;
+    const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before sending."); return; }
     if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
     if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
@@ -655,6 +643,7 @@ export default function SonusWorkspace() {
   }
 
   function disconnectWalletView() {
+    disconnect();
     setWalletAddress(null);
     setWalletChainId(null);
     setWalletBalances({ native: null, status: "Not connected", updatedAt: null });
