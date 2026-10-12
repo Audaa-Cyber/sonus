@@ -591,7 +591,6 @@ export default function SonusWorkspace() {
         setNotice("Preflight blocked this payment: " + blocking.join(" "));
         return;
       }
-      const warnings = (preflight.checks || []).filter(check => check.severity === "warning").map(check => check.message);
       if (from.toLowerCase() === paymentIntent.recipient.toLowerCase()) { setNotice("Recipient and sender are the same wallet. Check the address before proceeding."); return; }
       const balanceHex = await provider.request({ method: "eth_getBalance", params: [from, "latest"] }) as string;
       if (BigInt(balanceHex) < value) { setNotice("Your wallet balance may not cover this amount. Nothing was sent."); return; }
