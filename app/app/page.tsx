@@ -956,8 +956,13 @@ export default function SonusWorkspace() {
 
   async function prepareRealtimePaymentDraft(transcript: string) {
     const latestUserTurn = messagesRef.current.filter(message => message.role === "user").slice(-1)[0]?.text || "";
+    const explicitPaymentRequest = /\b(?:send|pay|transfer)\b/i.test(transcript);
     const hasPaymentContext = Boolean(intentRef.current) || /\b(?:send|pay|transfer)\b/i.test(latestUserTurn);
-    if (!hasPaymentContext && !/\b(?:send|pay|transfer)\b/i.test(transcript)) return;
+    const likelyPaymentFollowUp = hasPaymentContext && (
+      /\d|\b(?:to|for|make it|change|same|recipient|amount|instead|use|that address)\b/i.test(transcript) ||
+      savedContacts.some(contact => transcript.toLowerCase().includes(contact.name.toLowerCase()))
+    );
+    if (!explicitPaymentRequest && !likelyPaymentFollowUp) return;
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
