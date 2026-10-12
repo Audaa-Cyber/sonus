@@ -111,7 +111,10 @@ function bindIntentToUserText(output: AssistantOutput, userText: string): Assist
   if (output.intent.action !== "transfer") return output;
   const context = userText.toLowerCase();
   if (isNonActionablePaymentText(userText)) {
-    return { ...output, intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
+    return {
+      reply: "I can help assess the risks, but I will not turn advisory, hypothetical, or negative wording into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset.",
+      intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null }
+    };
   }
   if (!/\b(send|pay|transfer)\b/i.test(userText)) {
     return { ...output, intent: { ...output.intent, action: "unknown", amount: null, asset: null, recipient: null, needsClarification: true, clarificationQuestion: "Are you asking to prepare a transfer, or just discussing one?" } };
