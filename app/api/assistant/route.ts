@@ -1,3 +1,4 @@
+import { isHypotheticalPaymentQuestion } from "@/lib/payment-intent.mjs";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -68,7 +69,7 @@ async function getLiveMarketSummary(): Promise<string | null> {
 
 function localFallback(message: string): AssistantOutput {
   const text = message.trim();
-  const isHypothetical = /\b(?:should i|would you|is it safe|what if|how do i|can i|could i|do you think|is it okay to)\b/i.test(text);
+  const isHypothetical = isHypotheticalPaymentQuestion(text);
   const isTransfer = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
   if (isHypothetical && /\b(send|pay|transfer)\b/i.test(text)) {
     return { reply: "I can help you assess the risks, but I will not turn a question or hypothetical into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset.", intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
@@ -109,7 +110,7 @@ function localFallback(message: string): AssistantOutput {
 function bindIntentToUserText(output: AssistantOutput, userText: string): AssistantOutput {
   if (output.intent.action !== "transfer") return output;
   const context = userText.toLowerCase();
-  if (/\b(?:should i|would you|is it safe|what if|how do i|can i|could i|do you think|is it okay to)\b/i.test(userText)) {
+  if (isHypotheticalPaymentQuestion(userText)) {
     return { ...output, intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
   }
   if (!/\b(send|pay|transfer)\b/i.test(userText)) {
