@@ -46,7 +46,7 @@ test("accepts a UTF-8 BOM in JSON exports", () => {
 
 test("accepts a UTF-8 BOM in CSV headers", () => {
   const result = parseContactImport(
-    '\uFEFFname,address\\nCora,0x4444444444444444444444444444444444444444',
+    '\uFEFFname,address\nCora,0x4444444444444444444444444444444444444444',
     "contacts.csv"
   );
   assert.equal(result.contacts.length, 1);
