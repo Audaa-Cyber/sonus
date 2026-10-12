@@ -1056,7 +1056,7 @@ export default function SonusWorkspace() {
           }
         } else if (payload.type === "response.done") {
           setSpeaking(false);
-          const assistantText = (realtimeAssistantAudioText.current || realtimeAssistantPlainText.current).trim();
+          const assistantText = (realtimeAssistantAudioText.current || realtimeAssistantPlainText.current).trim().replace(/0x[a-fA-F0-9]{40}/g, address => savedContacts.find(contact => contact.address.toLowerCase() === address.toLowerCase())?.name || "the recipient address");
           if (assistantText) setMessages(current => [...current, { role: "assistant", text: assistantText }]);
           realtimeAssistantAudioText.current = "";
           realtimeAssistantPlainText.current = "";
