@@ -34,3 +34,12 @@ test("rejects files without the required columns", () => {
 test("rejects oversized imports", () => {
   assert.throws(() => parseContactImport("x".repeat(2_000_001), "contacts.json"), /under 2 MB/);
 });
+
+test("accepts a UTF-8 BOM in JSON exports", () => {
+  const result = parseContactImport(
+    '\\uFEFF' + JSON.stringify([{ name: "Bela", address: "0x3333333333333333333333333333333333333333" }]),
+    "contacts.json"
+  );
+  assert.equal(result.contacts.length, 1);
+  assert.equal(result.contacts[0].name, "Bela");
+});
