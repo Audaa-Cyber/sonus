@@ -792,7 +792,7 @@ export default function SonusWorkspace() {
       return;
     }
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(lastAssistantMessage.text.replace(/\\n+/g, ". "));
+    const utterance = new SpeechSynthesisUtterance(lastAssistantMessage.text.replace(/\n+/g, ". "));
     utterance.rate = 1.02;
     utterance.pitch = 1;
     utterance.volume = 1;
