@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "SONUS — Money, understood.",
@@ -18,10 +19,15 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#080A0F",
+  colorScheme: "dark",
+};
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><Providers>{children}</Providers></body>
     </html>
   );
 }
