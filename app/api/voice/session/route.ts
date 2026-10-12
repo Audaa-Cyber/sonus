@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     ].join("\n"),
     audio: {
       input: {
-        transcription: { model: "gpt-realtime-whisper" },
+        transcription: { model: "gpt-transcribe" },
         turn_detection: { type: "semantic_vad", create_response: true, interrupt_response: true, eagerness: "medium" },
         noise_reduction: { type: "near_field" }
       },
