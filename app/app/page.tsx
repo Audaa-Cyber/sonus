@@ -696,7 +696,7 @@ export default function SonusWorkspace() {
   } as Record<string, string>)[active] || "Your money, in context.", [active]);
 
   function speakAssistantReply(text: string) {
-    if (!voiceReplyEnabled.current || typeof window === "undefined") return;
+    if (!voiceReplyEnabled.current || realtimeMode.current || typeof window === "undefined") return;
     if (!("speechSynthesis" in window)) {
       setNotice("Voice replies are not supported in this browser. Sonus can still show text replies.");
       if (voiceConversationEnabled.current) voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 250);
