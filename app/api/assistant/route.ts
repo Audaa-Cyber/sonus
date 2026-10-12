@@ -239,7 +239,7 @@ export async function POST(request: Request) {
       if (!item || typeof item !== "object") return [];
       const row = item as Record<string, unknown>;
       if ((row.role !== "user" && row.role !== "assistant") || typeof row.content !== "string") return [];
-      return [{ role: row.role, content: row.content.slice(0, 1500) }];
+      return [{ role: row.role as "user" | "assistant", content: row.content.slice(0, 1500) }];
     })
     : [];
 
