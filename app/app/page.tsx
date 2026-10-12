@@ -798,6 +798,7 @@ export default function SonusWorkspace() {
     engine.interimResults = true;
     engine.maxAlternatives = 1;
     let finalTranscript = "";
+    let submittedTranscript = false;
     engine.onresult = (event) => {
       const results = event.results;
       if (!results) return;
@@ -810,7 +811,8 @@ export default function SonusWorkspace() {
       }
       const visibleTranscript = (finalTranscript + interim).trim();
       if (visibleTranscript) setInput(visibleTranscript);
-      if (finalTranscript.trim()) {
+      if (finalTranscript.trim() && !submittedTranscript) {
+        submittedTranscript = true;
         const submitted = finalTranscript.trim();
         setListening(false);
         try { engine.stop(); } catch { /* recognition may already have ended */ }
