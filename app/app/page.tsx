@@ -109,7 +109,21 @@ export default function SonusWorkspace() {
   const [swapCapabilities, setSwapCapabilities] = useState<SwapCapabilityResponse | null>(null);
   const [swapCapabilitiesError, setSwapCapabilitiesError] = useState("");
   const recognition = useRef<SpeechRecognitionLike | null>(null);
+  const voiceConversationEnabled = useRef(false);
+  const voiceReplyEnabled = useRef(false);
+  const voiceRestartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [speaking, setSpeaking] = useState(false);
   const paymentSubmissionLock = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      recognition.current?.stop();
+      if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    };
+  }, []);
 
   const visibleTransactions = transactionHistory.filter(item => {
     const query = historyQuery.trim().toLowerCase();
@@ -671,6 +685,28 @@ export default function SonusWorkspace() {
     Settings: "Make Sonus work your way."
   } as Record<string, string>)[active] || "Your money, in context.", [active]);
 
+  function speakAssistantReply(text: string) {
+    if (!voiceReplyEnabled.current || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\\n+/g, ". "));
+    utterance.lang = "en-US";
+    utterance.rate = 1.04;
+    utterance.pitch = 1;
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onerror = () => setSpeaking(false);
+    utterance.onend = () => {
+      setSpeaking(false);
+      if (voiceConversationEnabled.current) voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 250);
+    };
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function appendAssistantReply(text: string) {
+    setMessages(current => [...current, { role: "assistant", text }]);
+    speakAssistantReply(text);
+  }
+
   async function submitMessage(value = input) {
     const clean = value.trim();
     if (!clean || assistantBusy) return;
@@ -701,7 +737,7 @@ export default function SonusWorkspace() {
         : transactionHistory.length
           ? "I couldn't find a matching transaction note in this browser's Sonus history. Try a payment amount or a word from its note, or open Activity to search your saved records. Sonus only knows transactions submitted through this browser; this isn't your complete wallet history."
           : "There are no Sonus transaction records in this browser yet. After a wallet-approved Arc Testnet payment is recorded, you can add a note in Activity and ask me about it here.";
-      setMessages(current => [...current, { role: "assistant", text: answer }]);
+      appendAssistantReply(answer);
       setAssistantBusy(false);
       setNotice("Answered from browser-local transaction memory. Transaction records and notes were not sent to the assistant API.");
       return;
@@ -720,7 +756,7 @@ export default function SonusWorkspace() {
         error?: string;
       };
       if (!response.ok) throw new Error(data.error || "Assistant request failed.");
-      setMessages(current => [...current, { role: "assistant", text: data.reply || "I couldn't produce a useful response. Please try rephrasing that." }]);
+      appendAssistantReply(data.reply || "I couldn't produce a useful response. Please try rephrasing that.");
       const parsed = data.intent;
       if (parsed?.action === "transfer" && parsed.amount && parsed.recipient && parsed.asset && SUPPORTED_DRAFT_ASSETS.has(parsed.asset.toUpperCase())) {
         const resolvedRecipient = resolveSavedRecipient(parsed.recipient);
@@ -747,35 +783,87 @@ export default function SonusWorkspace() {
     }
   }
 
-  function startVoice() {
-    if (typeof window === "undefined") return;
+  function beginVoiceCapture() {
+    if (typeof window === "undefined" || !voiceConversationEnabled.current) return;
     const speechWindow = window as SpeechWindow;
     const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!SpeechRecognition) {
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
       setNotice("Voice input is not supported in this browser. Try a recent version of Chrome.");
-      return;
-    }
-    if (listening) {
-      recognition.current?.stop();
-      setListening(false);
       return;
     }
     const engine = new SpeechRecognition();
     engine.lang = "en-US";
-    engine.interimResults = false;
+    engine.interimResults = true;
     engine.maxAlternatives = 1;
+    let finalTranscript = "";
     engine.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || "";
-      setInput(transcript);
-      setListening(false);
-      if (transcript) submitMessage(transcript);
+      const results = event.results;
+      if (!results) return;
+      let interim = "";
+      for (let index = 0; index < results.length; index++) {
+        const result = results[index];
+        const transcript = result?.[0]?.transcript || "";
+        if (result?.isFinal) finalTranscript += transcript + " ";
+        else interim += transcript;
+      }
+      const visibleTranscript = (finalTranscript + interim).trim();
+      if (visibleTranscript) setInput(visibleTranscript);
+      if (finalTranscript.trim()) {
+        const submitted = finalTranscript.trim();
+        setListening(false);
+        try { engine.stop(); } catch { /* recognition may already have ended */ }
+        submitMessage(submitted);
+      }
     };
-    engine.onerror = () => { setListening(false); setNotice("Could not capture speech. Check microphone permission and try again."); };
-    engine.onend = () => setListening(false);
+    engine.onerror = (event: { error?: string }) => {
+      setListening(false);
+      if (event.error === "no-speech" && voiceConversationEnabled.current) {
+        voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 350);
+        return;
+      }
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      setNotice(event.error === "not-allowed"
+        ? "Microphone access was denied. Allow microphone access in browser settings and try again."
+        : "Voice capture stopped (" + (event.error || "unknown error") + "). Tap the mic to try again.");
+    };
+    engine.onend = () => {
+      setListening(false);
+      if (voiceConversationEnabled.current && !window.speechSynthesis?.speaking) {
+        voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 300);
+      }
+    };
     recognition.current = engine;
     setListening(true);
-    setNotice("Listening… speak your request.");
-    engine.start();
+    setNotice("Listening… speak naturally. Sonus will answer out loud; tap the mic to end voice mode.");
+    try { engine.start(); }
+    catch {
+      setListening(false);
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      setNotice("Could not start the microphone. Check browser permissions and try again.");
+    }
+  }
+
+  function startVoice() {
+    if (typeof window === "undefined") return;
+    if (voiceConversationEnabled.current) {
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      recognition.current?.stop();
+      window.speechSynthesis?.cancel();
+      setListening(false);
+      setSpeaking(false);
+      setNotice("Voice conversation ended.");
+      return;
+    }
+    voiceConversationEnabled.current = true;
+    voiceReplyEnabled.current = true;
+    window.speechSynthesis?.cancel();
+    beginVoiceCapture();
   }
 
   function navigate(label: string) {
@@ -889,7 +977,7 @@ export default function SonusWorkspace() {
               <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}{assistantBusy && <div className="ws-message assistant"><span className="ws-message-avatar"><AudioLines size={14} /></span><p>Thinking through your request…</p></div>}</div>
               {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? (savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) ? "Saved contact address · not identity-verified" : "Address format only · not verified") : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) && <button type="button" className="ws-recipient-save" onClick={() => { setContactAddressInput(intent.recipient); setContactNameInput(""); document.getElementById("ws-contact-name-field")?.focus(); setNotice("Add a recognizable name for this address in Saved recipients. Verify the address independently before saving."); }}> <Plus size={11} /> Save to address book</button>}{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This is a draft until you choose “Send test payment” and approve the exact transaction in your wallet. Names are not resolved. Sending is restricted to native USDC on Arc Testnet."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }} disabled={balanceBusy || paymentTx?.status === "submitted" || paymentTx?.status === "pending"}>{paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction pending" : balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button>{intent.feeEstimate && EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && intent.asset === "USDC" && paymentTx?.status !== "submitted" && paymentTx?.status !== "pending" && paymentTx?.status !== "confirmed" && <button className="ws-send-payment-btn" onClick={() => void sendArcTestnetPayment()} disabled={balanceBusy}>{balanceBusy ? "Working…" : "Send test payment"} <ArrowUpRight size={13} /></button>}</div></div>}
               {paymentTx && <div className={"ws-payment-result " + paymentTx.status} role="status" aria-live="polite"><div><span className="ws-eyebrow">ON-CHAIN TRANSACTION</span><strong>{paymentTx.status === "confirmed" ? "Payment confirmed" : paymentTx.status === "failed" ? "Transaction failed" : paymentTx.status === "pending" ? "Confirmation pending" : "Transaction submitted"}</strong><small>{paymentTx.detail}</small><a href={"https://testnet.arcscan.app/tx/" + paymentTx.hash} target="_blank" rel="noreferrer">View transaction on Arcscan <ExternalLink size={12} /></a></div><button onClick={() => navigator.clipboard.writeText(paymentTx.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(paymentTx.hash))} aria-label="Copy transaction hash"><Copy size={15} /></button></div>}<div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
-              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
+              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={voiceConversationEnabled.current ? "End voice conversation" : "Start voice conversation"} title={speaking ? "Speaking. Tap to end voice mode." : listening ? "Listening. Tap to end voice mode." : "Start hands-free voice conversation"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
               <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
             </section>
             <footer className="ws-footer"><span>SONUS / PRIVATE WORKSPACE</span><span>BUILT FOR CLARITY. DESIGNED FOR CONTROL.</span><button onClick={() => setNotice("Dashboard prices and portfolio examples are illustrative. Native USDC transfers are connected on Arc Testnet only; swaps, bridges, and other networks are not live.")}>What’s live? <ExternalLink size={12} /></button></footer>
