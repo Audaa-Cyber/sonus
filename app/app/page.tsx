@@ -778,7 +778,7 @@ export default function SonusWorkspace() {
   async function submitMessage(value = input) {
     const clean = value.trim();
     if (!clean) return;
-    const approvalPhrase = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(clean);
+    const approvalPhrase = /^(?:(?:yes|yeah|yep|approved?|confirmed?|confirm|i approve|i confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)(?:[ ,]+(?:please|now|then|it|ahead|that|the|payment|transaction|transfer|send|approve|confirm))*)[.! ]*$/i.test(clean);
     const pendingIntent = intentRef.current;
     if (pendingIntent && approvalPhrase) {
       setInput("");
@@ -1034,7 +1034,7 @@ export default function SonusWorkspace() {
         if (payload.type === "conversation.item.input_audio_transcription.completed" && payload.transcript?.trim()) {
           const transcript = payload.transcript.trim();
           setMessages(current => [...current, { role: "user", text: transcript }]);
-          const approval = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(transcript);
+          const approval = /^(?:(?:yes|yeah|yep|approved?|confirmed?|confirm|i approve|i confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)(?:[ ,]+(?:please|now|then|it|ahead|that|the|payment|transaction|transfer|send|approve|confirm))*)[.! ]*$/i.test(transcript);
           if (approval && intentRef.current) {
             setMessages(current => [...current, { role: "assistant", text: "Opening your wallet now. Check the payment details and approve it there if everything looks right." }]);
             void sendArcTestnetPayment(intentRef.current);
