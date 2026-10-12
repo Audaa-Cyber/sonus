@@ -775,7 +775,7 @@ export default function SonusWorkspace() {
       if (data.mode === "fallback") setNotice("AI mode is not configured yet. Sonus used its local assistant fallback; responses are limited.");
     } catch (error) {
       const result = buildReply(clean);
-      setMessages(current => [...current, { role: "assistant", text: result.reply + "\\n\\nThe AI service is unavailable right now, so this response came from the local fallback." }]);
+      appendAssistantReply(result.reply + "\n\nThe AI service is unavailable right now, so this response came from the local fallback.");
       if (result.intent) { setIntent({ ...result.intent, recipient: resolveSavedRecipient(result.intent.recipient) }); setPaymentTx(null); }
       setNotice("Assistant API unavailable: " + (error instanceof Error ? error.message : "request failed"));
     } finally {
