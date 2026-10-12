@@ -228,7 +228,8 @@ export async function POST(request: Request) {
   };
 
   try {
-    const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/+$/, "");
+    let baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+    while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
     const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : baseUrl + "/chat/completions";
     const instructions = [
       "You are Sonus, a careful crypto payment-intelligence assistant.",
