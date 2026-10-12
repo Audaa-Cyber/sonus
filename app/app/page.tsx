@@ -3,7 +3,6 @@
 import "./workspace.css";
 import { parseContactImport } from "@/lib/contact-import.mjs";
 import { normalizeSavedContacts } from "@/lib/contact-storage.mjs";
-import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
 import { normalizeTransactionHistory } from "@/lib/transaction-history.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -19,12 +18,12 @@ import {
 
 type Message = { role: "assistant" | "user"; text: string };
 type SavedContact = { id: string; name: string; address: string; createdAt: number };
-type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string; feeEstimate?: string };
+type Intent = { recipient: string; recipientLabel?: string; amount: string; asset: string; network: string; reason: string };
 type WalletBalances = { native: string | null; status: string; updatedAt: number | null };
 type PaymentTx = { hash: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string };
 type StoredTransaction = { hash: string; from: string; to: string; amount: string; asset: string; network: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string; createdAt: number; updatedAt: number; blockNumber?: string; note?: string; policySummary?: string };
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
-const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
+const SUPPORTED_DRAFT_ASSETS = new Set(["USDC"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
 type SpeechRecognitionLike = { lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }> & { isFinal?: boolean }> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
@@ -53,33 +52,6 @@ const starters = [
   { icon: ShieldCheck, label: "Check a wallet", prompt: "What should I check before sending crypto to a new address?" },
 ];
 
-function buildReply(input: string): { reply: string; intent?: Intent } {
-  const text = input.trim();
-  const isHypothetical = isNonActionablePaymentText(text);
-  const send = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
-  if (isHypothetical) {
-    return { reply: "I can help you assess the risks, but I will not turn advisory, hypothetical, or negative wording into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset." };
-  }
-  if (send) {
-    const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|usd)?/i);
-    const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
-    const asset = (amountMatch?.[2] || "USDC").toUpperCase();
-    const amount = amountMatch?.[1] ? (amountMatch[1].startsWith(".") ? "0" + amountMatch[1] : amountMatch[1]) : "";
-    const recipient = recipientMatch?.[1] || "";
-    if (!amount || !recipient || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !SUPPORTED_DRAFT_ASSETS.has(asset)) {
-      return { reply: "I can help prepare that, but I need a valid positive amount, a supported token (USDC, USDT, ETH, or SOL), and a recipient. For example: “Send 25 USDC to Alex for lunch.”" };
-    }
-    const reasonMatch = text.match(/\bfor\s+(.+)$/i);
-    return {
-      reply: EVM_ADDRESS_RE.test(recipient) ? "I’ve drafted the transfer. The address format looks like an EVM address, but Sonus has not verified ownership, token support, or the destination network." : "I’ve drafted the transfer, but this recipient is only a name or handle. Sonus has not resolved it to a wallet address, so do not treat the recipient as verified.",
-      intent: { recipient, amount, asset, network: "Choose network", reason: reasonMatch?.[1] || "Not specified" }
-    };
-  }
-  if (/swap|exchange|trade/i.test(text)) return { reply: "I can help plan a swap. Choose the token you’re spending, the token you want, and your preferred network. Live quotes and execution are not connected in this preview." };
-  if (/market|price|trend|overview/i.test(text)) return { reply: "I couldn't retrieve verified live market data from the assistant service just now. The market panel may still load separately; please retry before relying on current prices." };
-  if (/wallet|address|safe|risk|scam/i.test(text)) return { reply: "Before sending: verify the address through a trusted channel, check the network and asset, review the amount and fees, and start with a small test transfer if appropriate. Never share your recovery phrase." };
-  return { reply: "I can help you plan a transfer, think through a swap, review wallet safety, or explain a market concept. For any transaction, I’ll show the details for review first." };
-}
 
 export default function SonusWorkspace() {
   const [active, setActive] = useState("Overview");
@@ -91,6 +63,7 @@ export default function SonusWorkspace() {
   ]);
   const messagesRef = useRef<Message[]>(messages);
   const [intent, setIntent] = useState<Intent | null>(null);
+  const intentRef = useRef<Intent | null>(intent);
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [contactsReady, setContactsReady] = useState(false);
   const [contactNameInput, setContactNameInput] = useState("");
@@ -151,6 +124,10 @@ export default function SonusWorkspace() {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    intentRef.current = intent;
+  }, [intent]);
 
   useEffect(() => {
     return () => {
@@ -461,40 +438,6 @@ export default function SonusWorkspace() {
     }
   }
 
-  async function estimatePaymentFee() {
-    if (!intent) return;
-    const provider = selectedProvider;
-    if (!provider || !walletAddress) { setNotice("Connect a wallet before estimating a transaction fee."); return; }
-    if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient is not a wallet address. Resolve it before estimating fees."); return; }
-    if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only."); return; }
-    const match = intent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
-    if (!match) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
-    const units6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
-    if (units6 <= 0n) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
-    const value = "0x" + (units6 * 1000000000000n).toString(16);
-    setBalanceBusy(true);
-    setNotice("Estimating gas on Arc Testnet. No transaction will be sent.");
-    try {
-      const chain = await provider.request({ method: "eth_chainId" }) as string;
-      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Switch the wallet to Arc Testnet before estimating this payment."); return; }
-      const accounts = await provider.request({ method: "eth_accounts" }) as string[];
-      const from = accounts?.[0];
-      if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before estimating."); return; }
-      const gasHex = await provider.request({ method: "eth_estimateGas", params: [{ from, to: intent.recipient, value }, "latest"] }) as string;
-      const priceHex = await provider.request({ method: "eth_gasPrice" }) as string;
-      const feeWei = BigInt(gasHex) * BigInt(priceHex);
-      const feeWhole = feeWei / 1000000000000000000n;
-      const feeFraction = (feeWei % 1000000000000000000n) / 1000000000000n;
-      const fee = Number(feeWhole) + Number(feeFraction) / 1000000;
-      const balanceHex = await provider.request({ method: "eth_getBalance", params: [from, "latest"] }) as string;
-      const enoughFunds = BigInt(balanceHex) >= BigInt(value) + feeWei;
-      const label = fee.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC (estimated)" + (enoughFunds ? "" : " · insufficient for amount + fee");
-      setIntent(current => current ? { ...current, feeEstimate: label } : current);
-      setWalletBalances(current => ({ ...current, native: (Number(BigInt(balanceHex) / 1000000000000n) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 }), status: enoughFunds ? "Balance covers amount + estimated fee at time of check" : "Warning: balance may not cover amount + estimated fee", updatedAt: Date.now() }));
-      setNotice((enoughFunds ? "Estimated fee received. " : "Warning: wallet balance appears insufficient for the amount plus estimated fee. ") + "This estimate can change; nothing was signed or sent.");
-    } catch (error) { setNotice("Could not estimate fee: " + (error instanceof Error ? error.message : "request failed") + ". No transaction was sent."); }
-    finally { setBalanceBusy(false); }
-  }
 
   function exportTransactionHistory() {
     if (!transactionHistory.length) { setNotice("There are no transaction records to export yet."); return; }
@@ -574,13 +517,14 @@ export default function SonusWorkspace() {
     });
   }
 
-  async function sendArcTestnetPayment() {
-    if (!intent) return;
+  async function sendArcTestnetPayment(intentOverride?: Intent | null) {
+    const paymentIntent = intentOverride || intentRef.current || intent;
+    if (!paymentIntent) return;
     const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before sending."); return; }
-    if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
-    if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
-    const match = intent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
+    if (paymentIntent.network !== "Arc Testnet" || paymentIntent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
+    if (!EVM_ADDRESS_RE.test(paymentIntent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
+    const match = paymentIntent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
     if (!match) { setNotice("Enter a positive USDC amount with up to 6 decimal places."); return; }
     const amountUnits6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
     if (amountUnits6 <= 0n) { setNotice("Enter an amount greater than zero."); return; }
@@ -590,10 +534,16 @@ export default function SonusWorkspace() {
     setBalanceBusy(true);
     let submittedHash: string | null = null;
     let transactionSender: string | null = null;
-    setNotice("Rechecking network, recipient, balance, and fees before wallet approval.");
+    setNotice("Checking the payment, then opening your wallet for approval.");
     try {
-      const chain = await provider.request({ method: "eth_chainId" }) as string;
-      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Wrong network. Switch to Arc Testnet before sending."); return; }
+      let chain = await provider.request({ method: "eth_chainId" }) as string;
+      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) {
+        try { await switchChainAsync({ chainId: ARC_TESTNET_CHAIN_ID }); }
+        catch { setNotice("Please switch your wallet to Arc Testnet to continue. Nothing was sent."); return; }
+        const switchedChain = await provider.request({ method: "eth_chainId" }) as string;
+        if (Number.parseInt(switchedChain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Your wallet is not on Arc Testnet yet. Nothing was sent."); return; }
+        chain = switchedChain;
+      }
       const accounts = await provider.request({ method: "eth_accounts" }) as string[];
       const from = accounts?.[0];
       if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before sending."); return; }
@@ -601,7 +551,7 @@ export default function SonusWorkspace() {
       if (!spendingRulesReady) { setNotice("Payment rules are still loading. No transaction was sent; try again."); return; }
       if (spendingRulesStorageError) { setNotice("Payment rules could not be read or saved. No transaction was sent; check browser storage and save the rules again."); return; }
       if (spendingRules.requireSavedRecipient) {
-        if (!contactsReady || !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase())) {
+        if (!contactsReady || !savedContacts.some(contact => contact.address.toLowerCase() === paymentIntent.recipient.toLowerCase())) {
           setNotice("Recipient rule blocked this payment: this recipient is not in your saved contacts. Save and verify the exact address in Contacts, or disable the saved-recipient rule in Settings.");
           return;
         }
@@ -613,9 +563,9 @@ export default function SonusWorkspace() {
           setNotice("Your spending rules are invalid. Update them in Settings before sending.");
           return;
         }
-        const requested = Number(intent.amount);
+        const requested = Number(paymentIntent.amount);
         if (requested > maxSingle) {
-          setNotice("Spending rule blocked this payment: " + intent.amount + " USDC exceeds your per-payment limit of " + spendingRules.maxSingleUsdc + " USDC. Change the limit in Settings if you intend to allow it.");
+          setNotice("Spending rule blocked this payment: " + paymentIntent.amount + " USDC exceeds your per-payment limit of " + spendingRules.maxSingleUsdc + " USDC. Change the limit in Settings if you intend to allow it.");
           return;
         }
         const utcDayStart = new Date();
@@ -631,7 +581,7 @@ export default function SonusWorkspace() {
       const preflightResponse = await fetch("/api/risk/preflight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: from, recipient: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, chainId: Number.parseInt(chain, 16) }),
+        body: JSON.stringify({ sender: from, recipient: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, chainId: Number.parseInt(chain, 16) }),
         cache: "no-store",
       });
       if (!preflightResponse.ok) { setNotice("Transaction preflight is unavailable. No transaction was sent; try again later."); return; }
@@ -641,34 +591,19 @@ export default function SonusWorkspace() {
         setNotice("Preflight blocked this payment: " + blocking.join(" "));
         return;
       }
-      const warnings = (preflight.checks || []).filter(check => check.severity === "warning").map(check => check.message);
-      if (from.toLowerCase() === intent.recipient.toLowerCase()) { setNotice("Recipient and sender are the same wallet. Check the address before proceeding."); return; }
-      const gasHex = await provider.request({ method: "eth_estimateGas", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16) }, "latest"] }) as string;
-      const gasLimit = (BigInt(gasHex) * 120n + 99n) / 100n;
-      const priceHex = await provider.request({ method: "eth_gasPrice" }) as string;
-      const feeWei = gasLimit * BigInt(priceHex);
+      if (from.toLowerCase() === paymentIntent.recipient.toLowerCase()) { setNotice("Recipient and sender are the same wallet. Check the address before proceeding."); return; }
       const balanceHex = await provider.request({ method: "eth_getBalance", params: [from, "latest"] }) as string;
-      if (BigInt(balanceHex) < value + feeWei) {
-        setNotice("Insufficient native USDC for the amount plus estimated fee. No transaction was sent.");
-        return;
-      }
-      const feeWhole = feeWei / 1000000000000000000n;
-      const feeFraction = (feeWei % 1000000000000000000n) / 1000000000000n;
-      const fee = (Number(feeWhole) + Number(feeFraction) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 });
-      const amountLabel = intent.amount + " USDC";
-      const warningText = warnings.length ? "\n\nPreflight warnings:\n• " + warnings.join("\n• ") : "";
+      if (BigInt(balanceHex) < value) { setNotice("Your wallet balance may not cover this amount. Nothing was sent."); return; }
       const policyLines = [spendingRules.enabled ? "Per-payment limit: " + spendingRules.maxSingleUsdc + " USDC; daily cap: " + spendingRules.dailyCapUsdc + " USDC" : "Amount limits: off", spendingRules.enabled ? "Recorded today before this payment: " + spendingUsedToday.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC" : "", spendingRules.requireSavedRecipient ? "Saved-recipient rule: exact address matched" : "Saved-recipient rule: off"].filter(Boolean);
-      const policyText = "\n\nSonus local policy:\n• " + policyLines.join("\n• ");
-      const confirmed = window.confirm("Review Arc Testnet payment\n\nFrom: " + from + "\nTo: " + intent.recipient + "\nAmount: " + amountLabel + "\nEstimated network fee: " + fee + " USDC" + policyText + warningText + "\n\nBasic parameter checks only; no phishing scanner or transaction simulation is connected. This will open your wallet for final approval. Only approve if these details are correct.");
-      if (!confirmed) { setNotice("Payment cancelled before opening the wallet. Nothing was sent."); return; }
       const finalChain = await provider.request({ method: "eth_chainId" }) as string;
-      if (Number.parseInt(finalChain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Network changed during review. No transaction was sent; review the payment again on Arc Testnet."); return; }
+      if (Number.parseInt(finalChain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Network changed. Please keep your wallet on Arc Testnet and try again."); return; }
       const finalAccounts = await provider.request({ method: "eth_accounts" }) as string[];
-      if (!finalAccounts?.[0] || finalAccounts[0].toLowerCase() !== from.toLowerCase()) { setNotice("Wallet account changed during review. No transaction was sent; reconnect and review again."); return; }
-      const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16), gas: "0x" + gasLimit.toString(16) }] }) as string;
+      if (!finalAccounts?.[0] || finalAccounts[0].toLowerCase() !== from.toLowerCase()) { setNotice("Your active wallet account changed. Reconnect and try again."); return; }
+      setNotice("Your wallet is opening. Review the recipient, amount, and fee there; approve only if correct.");
+      const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: paymentIntent.recipient, value: "0x" + value.toString(16) }] }) as string;
       if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) throw new Error("Wallet returned an invalid transaction hash.");
       submittedHash = hash;
-      recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "submitted", detail: "Submitted to Arc Testnet. Waiting for a transaction receipt.", policySummary: policyLines.join("; ") });
+      recordTransaction({ hash, from, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: "submitted", detail: "Submitted to Arc Testnet. Waiting for a transaction receipt.", policySummary: policyLines.join("; ") });
       setPaymentTx({ hash, status: "submitted", detail: "Submitted to your wallet. Waiting for Arc Testnet confirmation." });
       setNotice("Transaction submitted. Your wallet approved it; waiting for on-chain status.");
       for (let attempt = 0; attempt < 25; attempt++) {
@@ -678,19 +613,19 @@ export default function SonusWorkspace() {
           const success = receipt.status === "0x1";
           const blockNumber = receipt.blockNumber ? BigInt(receipt.blockNumber).toString() : undefined;
           const detail = success ? "Confirmed in block " + (blockNumber || "unknown") + "." : "The network reported a failed transaction.";
-          recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: success ? "confirmed" : "failed", detail, ...(blockNumber ? { blockNumber } : {}) });
+          recordTransaction({ hash, from, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: success ? "confirmed" : "failed", detail, ...(blockNumber ? { blockNumber } : {}) });
           setPaymentTx({ hash, status: success ? "confirmed" : "failed", detail });
           setNotice(success ? "Arc Testnet payment confirmed." : "Transaction was mined but failed. Check the explorer for details.");
           if (success) { setIntent(null); void refreshWalletBalances(); }
           return;
         }
       }
-      recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "pending", detail: "No receipt was found during the initial polling window. Check Arcscan before retrying." });
+      recordTransaction({ hash, from, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: "pending", detail: "No receipt was found during the initial polling window. Check Arcscan before retrying." });
       setPaymentTx({ hash, status: "pending", detail: "Still pending. You can check the transaction on Arcscan." });
       setNotice("Transaction is still pending. Do not resend until you check its status.");
     } catch (error) {
       if (submittedHash && transactionSender) {
-        recordTransaction({ hash: submittedHash, from: transactionSender, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
+        recordTransaction({ hash: submittedHash, from: transactionSender, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
         setPaymentTx({ hash: submittedHash, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
       }
       setNotice("Payment was not confirmed as submitted: " + (error instanceof Error ? error.message : "wallet request failed") + ". Check your wallet and transaction history before retrying.");
@@ -818,7 +753,8 @@ export default function SonusWorkspace() {
     }
     window.speechSynthesis.cancel();
     if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
-    const utterance = new SpeechSynthesisUtterance(text.replace(/\n+/g, ". "));
+    const spokenText = text.replace(/0x[a-fA-F0-9]{40}/g, address => savedContacts.find(contact => contact.address.toLowerCase() === address.toLowerCase())?.name || "the recipient address");
+    const utterance = new SpeechSynthesisUtterance(spokenText.replace(/\n+/g, ". "));
     utterance.lang = "en-US";
     utterance.rate = 1.04;
     utterance.pitch = 1;
@@ -841,7 +777,17 @@ export default function SonusWorkspace() {
 
   async function submitMessage(value = input) {
     const clean = value.trim();
-    if (!clean || assistantBusy) return;
+    if (!clean) return;
+    const approvalPhrase = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(clean);
+    const pendingIntent = intentRef.current;
+    if (pendingIntent && approvalPhrase) {
+      setInput("");
+      setMessages(current => [...current, { role: "user", text: clean }]);
+      appendAssistantReply("Opening your wallet now. Check the payment details and approve it there if everything looks right.");
+      void sendArcTestnetPayment(pendingIntent);
+      return;
+    }
+    if (assistantBusy) return;
     setInput("");
     setActive("Overview");
     setIntent(null);
@@ -880,11 +826,11 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name }) => name) })
       });
       const data = await response.json() as {
         reply?: string;
-        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; recipientLabel?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
         mode?: "ai" | "fallback";
         error?: string;
       };
@@ -896,22 +842,23 @@ export default function SonusWorkspace() {
         if (resolvedRecipient !== parsed.recipient) setNotice("Resolved the name using your local saved contact. This does not verify who controls the address.");
         setIntent({
           recipient: resolvedRecipient,
+          recipientLabel: parsed.recipientLabel || savedContacts.find(contact => contact.address.toLowerCase() === resolvedRecipient.toLowerCase())?.name,
           amount: parsed.amount,
-          asset: parsed.asset.toUpperCase(),
-          network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
+          asset: "USDC",
+          network: "Arc Testnet",
           reason: parsed.purpose || "Not specified"
         });
         setPaymentTx(null);
       } else if (parsed?.action === "transfer" && (parsed.amount || parsed.recipient)) {
         setNotice(parsed.clarificationQuestion || "Sonus identified a possible transfer, but the draft is incomplete. Provide a valid amount, asset, recipient, and network.");
       }
-      if (data.mode === "fallback") setNotice("AI mode is not configured yet. Sonus used its local assistant fallback; responses are limited.");
+      if (data.mode === "fallback") setNotice("Sonus is running in limited mode because its AI connection is not configured. Add a valid AI provider key to enable natural conversation.");
     } catch (error) {
-      const result = buildReply(clean);
-      appendAssistantReply(result.reply + "\n\nThe AI service is unavailable right now, so this response came from the local fallback.");
-      if (result.intent) { setIntent({ ...result.intent, recipient: resolveSavedRecipient(result.intent.recipient) }); setPaymentTx(null); }
-      setNotice("Assistant API unavailable: " + (error instanceof Error ? error.message : "request failed"));
-    } finally {
+      console.error("Sonus assistant request failed", error);
+      let health: { configured?: boolean; provider?: string; model?: string } | null = null;
+      try { const status = await fetch("/api/assistant", { cache: "no-store" }); health = await status.json(); } catch { /* status check is best-effort */ }
+      appendAssistantReply("Sorry, I couldn’t reach my assistant service just now. Please try again in a moment.");
+      setNotice(health?.configured ? "Sonus couldn’t connect to " + (health.provider || "the AI provider") + " using " + (health.model || "the configured model") + ". Check the server AI settings." : "No AI provider key is configured on the server. Add it to your deployment environment and restart.");
       setAssistantBusy(false);
     }
   }
@@ -961,7 +908,7 @@ export default function SonusWorkspace() {
           setListening(false);
           try { engine.stop(); } catch { /* recognition may already have ended */ }
           submitMessage(submitted);
-        }, 650);
+        }, 1500);
       }
     };
     engine.onerror = (event: { error?: string }) => {
@@ -1013,10 +960,10 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name }) => name) })
       });
       const data = await response.json() as {
-        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; recipientLabel?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
         error?: string;
       };
       if (!response.ok) throw new Error(data.error || "Could not prepare a payment draft.");
@@ -1026,9 +973,10 @@ export default function SonusWorkspace() {
         const resolvedRecipient = resolveSavedRecipient(parsed.recipient);
         setIntent({
           recipient: resolvedRecipient,
+          recipientLabel: parsed.recipientLabel || savedContacts.find(contact => contact.address.toLowerCase() === resolvedRecipient.toLowerCase())?.name,
           amount: parsed.amount,
-          asset: parsed.asset.toUpperCase(),
-          network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
+          asset: "USDC",
+          network: "Arc Testnet",
           reason: parsed.purpose || "Not specified"
         });
         setPaymentTx(null);
@@ -1086,7 +1034,13 @@ export default function SonusWorkspace() {
         if (payload.type === "conversation.item.input_audio_transcription.completed" && payload.transcript?.trim()) {
           const transcript = payload.transcript.trim();
           setMessages(current => [...current, { role: "user", text: transcript }]);
-          void prepareRealtimePaymentDraft(transcript);
+          const approval = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(transcript);
+          if (approval && intentRef.current) {
+            setMessages(current => [...current, { role: "assistant", text: "Opening your wallet now. Check the payment details and approve it there if everything looks right." }]);
+            void sendArcTestnetPayment(intentRef.current);
+          } else {
+            void prepareRealtimePaymentDraft(transcript);
+          }
         } else if (payload.type === "response.output_audio_transcript.delta" && payload.delta) {
           realtimeAssistantAudioText.current += payload.delta;
         } else if (payload.type === "response.output_audio_transcript.done" && payload.transcript) {
@@ -1097,9 +1051,12 @@ export default function SonusWorkspace() {
           setSpeaking(true);
         } else if (payload.type === "input_audio_buffer.speech_started") {
           setSpeaking(false);
+          if (realtimeChannel.current?.readyState === "open") {
+            try { realtimeChannel.current.send(JSON.stringify({ type: "response.cancel" })); } catch { /* session may already be idle */ }
+          }
         } else if (payload.type === "response.done") {
           setSpeaking(false);
-          const assistantText = (realtimeAssistantAudioText.current || realtimeAssistantPlainText.current).trim();
+          const assistantText = (realtimeAssistantAudioText.current || realtimeAssistantPlainText.current).trim().replace(/0x[a-fA-F0-9]{40}/g, address => savedContacts.find(contact => contact.address.toLowerCase() === address.toLowerCase())?.name || "the recipient address");
           if (assistantText) setMessages(current => [...current, { role: "assistant", text: assistantText }]);
           realtimeAssistantAudioText.current = "";
           realtimeAssistantPlainText.current = "";
@@ -1130,8 +1087,8 @@ export default function SonusWorkspace() {
       }
       const response = await fetch("/api/voice/session", {
         method: "POST",
-        headers: { "Content-Type": "application/sdp" },
-        body: peer.localDescription?.sdp || offer.sdp
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sdp: peer.localDescription?.sdp || offer.sdp, contacts: savedContacts.map(({ name }) => name), history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({})) as { error?: string };
@@ -1149,6 +1106,13 @@ export default function SonusWorkspace() {
 
   async function startVoice() {
     if (typeof window === "undefined") return;
+    if (voiceConversationEnabled.current && speaking && !realtimeMode.current) {
+      window.speechSynthesis?.cancel();
+      setSpeaking(false);
+      if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      beginVoiceCapture("Stopped speaking. Go ahead; I’m listening.");
+      return;
+    }
     if (voiceConversationEnabled.current) {
       voiceConversationEnabled.current = false;
       voiceReplyEnabled.current = false;
@@ -1294,7 +1258,7 @@ export default function SonusWorkspace() {
             <section className="ws-assistant-panel" id="ws-assistant">
               <div className="ws-assistant-heading"><div className="ws-assistant-symbol"><AudioLines size={19} /></div><div><span className="ws-eyebrow">YOUR PAYMENT INTELLIGENCE</span><h2>Ask Sonus<span className="ws-period">.</span></h2><p>Type it or say it. Start with what you want to do.</p></div><span className="ws-assistant-beta">PREVIEW</span></div>
               <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}{assistantBusy && <div className="ws-message assistant"><span className="ws-message-avatar"><AudioLines size={14} /></span><p>Thinking through your request…</p></div>}</div>
-              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? (savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) ? "Saved contact address · not identity-verified" : "Address format only · not verified") : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) && <button type="button" className="ws-recipient-save" onClick={() => { setContactAddressInput(intent.recipient); setContactNameInput(""); document.getElementById("ws-contact-name-field")?.focus(); setNotice("Add a recognizable name for this address in Saved recipients. Verify the address independently before saving."); }}> <Plus size={11} /> Save to address book</button>}{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This is a draft until you choose “Send test payment” and approve the exact transaction in your wallet. Names are not resolved. Sending is restricted to native USDC on Arc Testnet."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }} disabled={balanceBusy || paymentTx?.status === "submitted" || paymentTx?.status === "pending"}>{paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction pending" : balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button>{intent.feeEstimate && EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && intent.asset === "USDC" && paymentTx?.status !== "submitted" && paymentTx?.status !== "pending" && paymentTx?.status !== "confirmed" && <button className="ws-send-payment-btn" onClick={() => void sendArcTestnetPayment()} disabled={balanceBusy}>{balanceBusy ? "Working…" : "Send test payment"} <ArrowUpRight size={13} /></button>}</div></div>}
+              {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipientLabel || (EVM_ADDRESS_RE.test(intent.recipient) ? intent.recipient.slice(0, 10) + "…" + intent.recipient.slice(-6) : intent.recipient)}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? (savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) ? "Saved contact address · not identity-verified" : "Address format only · not verified") : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) && <button type="button" className="ws-recipient-save" onClick={() => { setContactAddressInput(intent.recipient); setContactNameInput(""); document.getElementById("ws-contact-name-field")?.focus(); setNotice("Add a recognizable name for this address in Saved recipients. Verify the address independently before saving."); }}> <Plus size={11} /> Save to address book</button>}{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><strong>Arc Testnet</strong></div><div><small>NOTE</small><strong>{intent.reason}</strong></div></div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Your wallet will show the network fee before approval</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This payment is ready for your wallet. Say “confirm” or “send it” to open the wallet, then approve there. Only native USDC on Arc Testnet is supported."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><span className="ws-wallet-approval-hint">Say “confirm” to open your wallet for approval.</span></div></div>}
               {paymentTx && <div className={"ws-payment-result " + paymentTx.status} role="status" aria-live="polite"><div><span className="ws-eyebrow">ON-CHAIN TRANSACTION</span><strong>{paymentTx.status === "confirmed" ? "Payment confirmed" : paymentTx.status === "failed" ? "Transaction failed" : paymentTx.status === "pending" ? "Confirmation pending" : "Transaction submitted"}</strong><small>{paymentTx.detail}</small><a href={"https://testnet.arcscan.app/tx/" + paymentTx.hash} target="_blank" rel="noreferrer">View transaction on Arcscan <ExternalLink size={12} /></a></div><button onClick={() => navigator.clipboard.writeText(paymentTx.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(paymentTx.hash))} aria-label="Copy transaction hash"><Copy size={15} /></button></div>}<div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
               <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={voiceConversationEnabled.current || speaking ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={voiceConversationEnabled.current ? "End voice conversation" : "Start voice conversation"} title={speaking ? "Speaking. Tap to end voice mode." : listening ? "Listening. Tap to end voice mode." : "Start hands-free voice conversation"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
               <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{speaking ? "Sonus is speaking…" : realtimeMode.current ? "Realtime voice connected." : listening ? "Listening (browser voice)…" : "Voice uses your browser’s speech recognition."}</span></div>

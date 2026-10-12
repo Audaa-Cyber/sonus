@@ -67,32 +67,51 @@ export async function POST(request: Request) {
   }
 
   const contentType = request.headers.get("content-type") || "";
-  if (!contentType.includes("application/sdp")) {
-    return NextResponse.json({ error: "Expected an SDP offer." }, { status: 415 });
+  if (!contentType.includes("application/json")) return NextResponse.json({ error: "Expected a JSON voice-session request." }, { status: 415 });
+  const rawBody = await request.text();
+  if (!rawBody || rawBody.length > 150_000) return NextResponse.json({ error: "Invalid or oversized voice-session request." }, { status: 413 });
+  let body: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(rawBody) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid");
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Voice-session request must be valid JSON." }, { status: 400 });
   }
-  const sdp = await request.text();
-  if (!sdp || sdp.length > 100_000) {
-    return NextResponse.json({ error: "Invalid or oversized SDP offer." }, { status: 413 });
-  }
+  const sdp = typeof body.sdp === "string" ? body.sdp : "";
+  if (!sdp || sdp.length > 100_000) return NextResponse.json({ error: "Invalid or oversized SDP offer." }, { status: 413 });
+  const contacts = Array.isArray(body.contacts) ? body.contacts.slice(0, 200).flatMap((item: unknown) => {
+    const name = typeof item === "string" ? item : item && typeof item === "object" ? (item as Record<string, unknown>).name : null;
+    if (typeof name !== "string" || !name.trim() || name.trim().length > 80) return [];
+    return [name.trim()];
+  }) : [];
+  const history = Array.isArray(body.history) ? body.history.slice(-8).flatMap((item: unknown) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    if ((row.role !== "user" && row.role !== "assistant") || typeof row.content !== "string") return [];
+    return [{ role: row.role, content: row.content.slice(0, 800) }];
+  }) : [];
 
   const session = {
     type: "realtime",
     model: process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1",
     instructions: [
-      "You are Sonus, a careful crypto payment-intelligence voice assistant.",
-      "Speak naturally and concisely. Ask a short clarifying question when a request is ambiguous.",
+      "You are Sonus, a warm and concise voice assistant. Speak naturally, like a helpful person, not a technical manual.",
+      "Remember the conversation and understand follow-up requests. Take the next useful step instead of merely repeating the command.",
       "Never claim a payment was sent, a balance was checked, a live price was verified, or a transaction was simulated.",
       "You cannot access wallets or execute transactions. A separate Sonus review flow must prepare and display any payment draft.",
-      "You cannot read the user's local transaction history, connected wallet balances, or saved contacts. Never invent prior payments or claim to have inspected the user's wallet.",
+      "Saved contact names and recent conversation are supplied below. Recognize exact saved contact names. Never speak a full wallet address; use the saved contact name or say the recipient.",
       "Never infer or invent a wallet address from a name or social handle.",
       "Never ask for seed phrases, private keys, or wallet passwords.",
-      "Sonus currently supports native USDC transfers on Arc Testnet only. Other networks and assets are not executable in this workspace.",
-      "Do not claim swaps, bridges, staking, or external identity resolution are live."
+      "Sonus supports native USDC on Arc Testnet only (chain ID 5042002). This is the default and only network. Never ask which network or estimate fees; the wallet will show fees during approval.",
+      "Do not claim swaps, bridges, staking, or external identity resolution are live.",
+      "Saved contact names: " + JSON.stringify(contacts),
+      "Recent conversation: " + JSON.stringify(history)
     ].join("\n"),
     audio: {
       input: {
         transcription: { model: "gpt-realtime-whisper" },
-        turn_detection: { type: "semantic_vad" },
+        turn_detection: { type: "semantic_vad", create_response: true, interrupt_response: true, eagerness: "medium" },
         noise_reduction: { type: "near_field" }
       },
       output: { voice: "marin" }
