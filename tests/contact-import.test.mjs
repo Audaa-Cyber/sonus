@@ -35,6 +35,13 @@ test("rejects oversized imports", () => {
   assert.throws(() => parseContactImport("x".repeat(2_000_001), "contacts.json"), /under 2 MB/);
 });
 
+test("measures the import limit in UTF-8 bytes, not JavaScript characters", () => {
+  assert.throws(
+    () => parseContactImport("é".repeat(1_000_001), "contacts.json"),
+    /under 2 MB/
+  );
+});
+
 test("accepts a UTF-8 BOM in JSON exports", () => {
   const result = parseContactImport(
     '\uFEFF' + JSON.stringify([{ name: "Bela", address: "0x3333333333333333333333333333333333333333" }]),
