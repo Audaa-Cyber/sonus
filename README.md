@@ -129,13 +129,15 @@ Official references: Arc App Kit bridge quickstart at `https://docs.arc.network/
 
 ## AI assistant API
 
-The workspace chat now calls a server-side `POST /api/assistant` route. When configured, it uses the OpenAI Responses API with a strict JSON schema so the UI receives a bounded reply and a typed intent draft. The model cannot sign transactions or call wallet methods; wallet signing remains in the browser and requires the wallet's own confirmation.
+The workspace chat now calls a server-side `POST /api/assistant` route. When configured, it uses the OpenAI-compatible Chat Completions API at `OPENAI_BASE_URL` (default `https://api.openai.com/v1`) with strict JSON-schema output when supported, and falls back to JSON mode for compatible providers that reject strict schemas. The UI receives a bounded reply and a typed intent draft. The model cannot sign transactions or call wallet methods; wallet signing remains in the browser and requires the wallet's own confirmation.
 
 ### Configure locally
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `OPENAI_API_KEY` to your own key. Optionally set `OPENAI_MODEL`; the default is `gpt-4.1-mini`.
-3. Restart the dev server after changing environment variables.
+2. Set `OPENAI_API_KEY` to your provider key and `OPENAI_MODEL` to a model supported by that provider. The default is `gpt-4.1-mini`.
+3. Optionally set `OPENAI_BASE_URL` to the provider's OpenAI-compatible API base URL. The default is `https://api.openai.com/v1`; for example, `https://cleanapis.com/v1`.
+4. Restart the dev server after changing environment variables.
+
 
 The key is read only by the server route. Do not add it to client-side code, commit `.env.local`, or paste it into chat. Without a key, the endpoint uses a clearly marked limited local fallback so the workspace still works. This fallback is not an LLM.
 
@@ -186,3 +188,10 @@ Run `npm test` to execute the built-in Node test suite. The suite covers request
 A Supabase SQL migration is included at `supabase/migrations/20261011000000_transaction_ledger.sql`. It creates a per-user transaction table, a duplicate guard on `(user, chain, transaction hash)`, query indexes, an `updated_at` trigger, and row-level security. Authenticated users can read their own rows and insert only `submitted` records; they cannot update or delete ledger rows directly. It also creates an append-only receipt-observation table linked to each transaction and owner, so future reconciliation can preserve status changes (including reorganization observations) instead of overwriting history. Only the trusted server role can append those events or update ledger status.
 
 **This is a schema foundation, not a live database integration.** Sonus does not yet initialize Supabase Auth or a database client, and the Activity UI still uses browser-local storage. Before enabling this ledger, create a Supabase project with Auth, apply the migration, configure server-only credentials, wire sign-in/session handling, and add a server route that verifies the signed-in user before inserting or reading rows. Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser code. Do not accept a client-supplied `user_id` as proof of identity; derive it from the verified Supabase session. Do not grant browser users update permissions for reconciliation fields.
+
+
+## Voice conversation
+
+In a browser that supports the Web Speech API, use the microphone button in the workspace to start a hands-free voice conversation. Sonus shows interim speech transcripts, sends the recognized request through the same assistant route as typed chat, speaks assistant replies using browser speech synthesis, then listens again for the next turn. Tap the microphone button again to stop voice mode. Browser microphone permission is required.
+
+This is a browser-based speech-recognition and text-to-speech loop, not a native realtime audio model. Response speed depends on the configured AI provider, and transcription quality and voice availability depend on the browser, operating system, and selected voice. It should not be described as equivalent to ChatGPT Voice's native realtime audio experience. Voice only creates chat requests and payment drafts; the existing review and wallet authorization remain required for any transfer.
