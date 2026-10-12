@@ -76,6 +76,7 @@ function buildReply(input: string): { reply: string; intent?: Intent } {
 
 export default function SonusWorkspace() {
   const [active, setActive] = useState("Overview");
+  const [currentDateLabel, setCurrentDateLabel] = useState("");
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
@@ -238,6 +239,10 @@ export default function SonusWorkspace() {
       setNotice("Spending rules could not be saved. Sending is paused until browser storage works.");
     }
   }, [spendingRules, spendingRulesReady]);
+
+  useEffect(() => {
+    setCurrentDateLabel(new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase());
+  }, []);
 
   useEffect(() => {
     try {
@@ -924,7 +929,7 @@ export default function SonusWorkspace() {
         <div className="ws-content">
           <div className="ws-page-heading">
             <div><p className="ws-eyebrow"><span /> YOUR FINANCIAL OVERVIEW</p><h1>{active === "Overview" ? <>Good afternoon<span className="ws-period">.</span></> : active}<span className="ws-period">{active === "Overview" ? "" : "."}</span></h1><p>{sectionSubtitle}</p></div>
-            <div className="ws-date"><span className="ws-live-dot" /> SUNDAY, OCTOBER 11, 2026</div>
+            <div className="ws-date"><span className="ws-live-dot" /> {currentDateLabel || "YOUR LOCAL DATE"}</div>
           </div>
 
           {active === "Overview" ? <>
