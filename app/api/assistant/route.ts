@@ -291,8 +291,12 @@ export async function POST(request: Request) {
   };
 
   try {
-    const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || process.env.CLEANAPIS_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-    const model = process.env.SONUS_AI_MODEL || process.env.CLEANAPIS_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";
+    const configuredBaseUrl = process.env.SONUS_AI_BASE_URL
+      || (process.env.CLEANAPIS_API_KEY ? process.env.CLEANAPIS_BASE_URL || "https://cleanapis.com/v1" : process.env.CLEANAPIS_BASE_URL)
+      || process.env.OPENAI_BASE_URL
+      || "https://api.openai.com/v1";
+    const model = process.env.SONUS_AI_MODEL
+      || (process.env.CLEANAPIS_API_KEY ? process.env.CLEANAPIS_MODEL || process.env.OPENAI_MODEL || "gemini-3.7-flash" : process.env.CLEANAPIS_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini");
     const baseUrl = configuredBaseUrl.trim().replace(/\/+$/, "").replace(/\/(?:chat\/completions|responses)$/i, "");
     let parsedBaseUrl: URL;
     try {
