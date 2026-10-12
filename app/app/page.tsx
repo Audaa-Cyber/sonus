@@ -523,7 +523,7 @@ export default function SonusWorkspace() {
     const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before sending."); return; }
     if (paymentIntent.network !== "Arc Testnet" || paymentIntent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
-    if (!EVM_ADDRESS_RE.test(paymentIntent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
+    if (!EVM_ADDRESS_RE.test(paymentIntent.recipient)) { setNotice("I couldn’t match that name to a saved contact. Add the recipient to Saved recipients or provide their wallet address."); return; }
     const match = paymentIntent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
     if (!match) { setNotice("Enter a positive USDC amount with up to 6 decimal places."); return; }
     const amountUnits6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
@@ -853,6 +853,7 @@ export default function SonusWorkspace() {
         setNotice(parsed.clarificationQuestion || "Sonus identified a possible transfer, but the draft is incomplete. Provide a valid amount, asset, recipient, and network.");
       }
       if (data.mode === "fallback") setNotice("Sonus is running in limited mode because its AI connection is not configured. Add a valid AI provider key to enable natural conversation.");
+      setAssistantBusy(false);
     } catch (error) {
       console.error("Sonus assistant request failed", error);
       let health: { configured?: boolean; provider?: string; model?: string } | null = null;
