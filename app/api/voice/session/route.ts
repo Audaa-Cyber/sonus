@@ -93,7 +93,6 @@ export async function POST(request: Request) {
   }) : [];
 
   const session = {
-  const session = {
     type: "realtime",
     model: process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1",
     instructions: [
