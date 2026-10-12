@@ -88,7 +88,7 @@ function localFallback(message: string): AssistantOutput {
     const validAsset = ASSETS.has(asset);
     const reply = validAmount && validAsset && recipient
       ? "I’ve prepared a transfer draft. The recipient is not verified, and no transaction has been sent. Confirm the exact address and network before continuing."
-      : "I can help prepare a transfer, but I need a positive amount, a supported asset, and a recipient. Try: “Send 25 USDC to 0x…”. Names are not resolved in fallback mode.";
+      : "I can help prepare a transfer, but I need a positive amount, a supported asset, and a recipient. Try: “Send 25 USDC to Alex”. I can use a contact you’ve saved in Sonus.";
     return {
       reply,
       intent: {
@@ -103,12 +103,12 @@ function localFallback(message: string): AssistantOutput {
       }
     };
   }
-  if (/\b(swap|exchange|trade)\b/i.test(text)) return { reply: "I can help plan a swap, but Sonus has not verified a supported Arc/Circle first-party same-chain swap API yet. Live quotes and execution remain disabled; I will not silently route through a third party or ask for your private key. Which assets and network are you considering?", intent: { action: "swap", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "Which assets and network?" } };
-  if (/\b(bridge|cross.chain)\b/i.test(text)) return { reply: "I can explain bridge options, but Sonus does not have live bridge quotes or execution connected yet. Tell me the source network, destination network, and asset.", intent: { action: "bridge", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "What are the source and destination networks?" } };
+  if (/\b(swap|exchange|trade)\b/i.test(text)) return { reply: "I can help you plan a swap, but swap quotes and execution aren’t available in Sonus yet. Which tokens are you thinking about exchanging?", intent: { action: "swap", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "Which assets and network?" } };
+  if (/\b(bridge|cross.chain)\b/i.test(text)) return { reply: "I can explain how bridging works, but Sonus can’t execute a bridge yet. What are you trying to move?", intent: { action: "bridge", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "What are the source and destination networks?" } };
   if (/\b(portfolio|balance|holdings)\b/i.test(text)) return { reply: "I can read native USDC on Arc Testnet when your wallet is connected. The portfolio dashboard and other asset balances are still illustrative, so I won’t invent a total or live valuation.", intent: { action: "portfolio", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
   if (/\b(market|price|trend|bitcoin|ethereum|solana)\b/i.test(text)) return { reply: "I’m checking the live market-data provider now. If it responds, I’ll share a timestamped spot-price snapshot; if not, I’ll say the current prices could not be verified.", intent: { action: "market", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
-  if (/\b(safe|risk|scam|address|wallet)\b/i.test(text)) return { reply: "Before sending, verify the destination through a trusted channel, confirm the network and asset, review the fee, and inspect the wallet’s final transaction details. Never share your recovery phrase. An address format alone does not prove identity.", intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
-  return { reply: "I can help plan transfers, swaps, bridges, wallet-safety checks, and crypto concepts. Live market data and most execution routes are not connected yet. What are you trying to accomplish?", intent: { action: "unknown", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "What are you trying to accomplish?" } };
+  if (/\b(safe|risk|scam|address|wallet)\b/i.test(text)) return { reply: "Good call to check first. Verify the recipient through a trusted channel, then review the details in your wallet. Never share your recovery phrase.", intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
+  return { reply: "I can help with USDC transfers on Arc Testnet, wallet safety, and crypto questions. What would you like to do?", intent: { action: "unknown", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "What are you trying to accomplish?" } };
 }
 
 function bindIntentToUserText(output: AssistantOutput, userText: string, contacts: SavedContactContext[] = [], history: Array<{ role: "user" | "assistant"; content: string }> = []): AssistantOutput {
@@ -126,11 +126,20 @@ function bindIntentToUserText(output: AssistantOutput, userText: string, contact
 
   const intent = { ...output.intent };
   const statedRecipient = intent.recipient?.trim() || "";
-  const contact = contacts.find(item => item.name.toLowerCase() === statedRecipient.toLowerCase() && context.includes(item.name.toLowerCase()));
+  // Resolve a saved contact even when the model omitted the recipient field.
+  // Only use names that actually appear in the active request/context.
+  const contact = contacts.find(item => {
+    const name = item.name.toLowerCase();
+    if (!context.includes(name)) return false;
+    return !statedRecipient || name === statedRecipient.toLowerCase() || !context.includes(statedRecipient.toLowerCase());
+  });
   if (contact) {
     intent.recipient = contact.name;
     intent.recipientLabel = contact.name;
-    if (intent.amount && (intent.asset === "USDC" || !intent.asset)) { intent.needsClarification = false; intent.clarificationQuestion = null; }
+    if (intent.amount && (intent.asset === "USDC" || !intent.asset)) {
+      intent.needsClarification = false;
+      intent.clarificationQuestion = null;
+    }
   } else if (statedRecipient && !context.includes(statedRecipient.toLowerCase())) {
     intent.recipient = null;
     intent.recipientLabel = null;
