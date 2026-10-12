@@ -52,3 +52,17 @@ test("accepts a UTF-8 BOM in CSV headers", () => {
   assert.equal(result.contacts.length, 1);
   assert.equal(result.contacts[0].name, "Cora");
 });
+
+test("rejects quotes embedded in an unquoted CSV field", () => {
+  assert.throws(
+    () => parseContactImport('name,address\nAl"ex,0x5555555555555555555555555555555555555555', "contacts.csv"),
+    /quote inside an unquoted field/
+  );
+});
+
+test("rejects trailing characters after a quoted CSV field", () => {
+  assert.throws(
+    () => parseContactImport('name,address\n"Alex"x,0x5555555555555555555555555555555555555555', "contacts.csv"),
+    /characters after a closing quote/
+  );
+});
