@@ -192,6 +192,11 @@ A Supabase SQL migration is included at `supabase/migrations/20261011000000_tran
 
 ## Voice conversation
 
-In a browser that supports the Web Speech API, use the microphone button in the workspace to start a hands-free voice conversation. Sonus shows interim speech transcripts, sends the recognized request through the same assistant route as typed chat, speaks assistant replies using browser speech synthesis, then listens again for the next turn. Tap the microphone button again to stop voice mode. Browser microphone permission is required.
+Use the microphone button in the workspace to start a hands-free voice conversation. Sonus checks whether the dedicated Realtime API is configured:
 
-This is a browser-based speech-recognition and text-to-speech loop, not a native realtime audio model. Response speed depends on the configured AI provider, and transcription quality and voice availability depend on the browser, operating system, and selected voice. It should not be described as equivalent to ChatGPT Voice's native realtime audio experience. Voice only creates chat requests and payment drafts; the existing review and wallet authorization remain required for any transfer.
+- **Realtime mode:** Set `OPENAI_REALTIME_API_KEY` to an OpenAI API key with Realtime API access. Sonus uses WebRTC for direct speech-to-speech audio, server-side voice instructions, automatic turn detection, live transcription events, and interruption support from the realtime session. Optionally set `OPENAI_REALTIME_MODEL`; the default is `gpt-realtime-2.1`.
+- **Browser fallback:** If no realtime key is configured or the realtime connection fails, Sonus uses browser speech recognition plus browser speech synthesis. That path has higher latency and depends on browser support and installed voices.
+
+`OPENAI_REALTIME_API_KEY` is deliberately separate from `OPENAI_API_KEY` and `OPENAI_BASE_URL`. A CleanAPIs proxy key used for regular chat is not a substitute for an OpenAI Realtime API key. Keep both keys server-side and never expose them in browser code. Realtime sessions can incur separate usage charges; configure billing limits before enabling them.
+
+Voice can prepare a payment draft in the background, but it never sends a transaction automatically. Review the recipient, amount, asset, and network, then approve the exact transaction in the wallet. The current realtime voice model is a separate API model and should not be claimed to be identical to ChatGPT Voice.
