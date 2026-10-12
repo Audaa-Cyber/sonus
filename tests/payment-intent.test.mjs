@@ -1,16 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isHypotheticalPaymentQuestion } from "../lib/payment-intent.mjs";
+import { isNonActionablePaymentText } from "../lib/payment-intent.mjs";
 
-test("classifies payment questions as advisory rather than explicit intent", () => {
+test("classifies advisory, hypothetical, and negative language as non-actionable", () => {
   for (const prompt of [
     "Should I send 25 USDC to Alex?",
     "Can I transfer money to this address?",
     "How do I pay someone safely?",
     "What if I send 10 ETH to the wrong wallet?",
-    "Do you think I should pay this invoice?"
+    "Do you think I should pay this invoice?",
+    "I do not want to send 25 USDC to Alex",
+    "Do not transfer funds to that address",
+    "I will not pay this invoice"
   ]) {
-    assert.equal(isHypotheticalPaymentQuestion(prompt), true, prompt);
+    assert.equal(isNonActionablePaymentText(prompt), true, prompt);
   }
 });
 
@@ -21,11 +24,11 @@ test("does not classify explicit payment commands as hypotheticals", () => {
     "Transfer 2 ETH to my saved wallet",
     "Would you send 25 USDC to Alex?"
   ]) {
-    assert.equal(isHypotheticalPaymentQuestion(prompt), false, prompt);
+    assert.equal(isNonActionablePaymentText(prompt), false, prompt);
   }
 });
 
-test("does not classify unrelated questions as payment hypotheticals", () => {
-  assert.equal(isHypotheticalPaymentQuestion("Should I check my wallet balance?"), false);
-  assert.equal(isHypotheticalPaymentQuestion("How do I use Sonus?"), false);
+test("does not classify unrelated questions as non-actionable payment text", () => {
+  assert.equal(isNonActionablePaymentText("Should I check my wallet balance?"), false);
+  assert.equal(isNonActionablePaymentText("How do I use Sonus?"), false);
 });
