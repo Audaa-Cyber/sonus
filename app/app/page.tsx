@@ -82,6 +82,7 @@ function buildReply(input: string): { reply: string; intent?: Intent } {
 export default function SonusWorkspace() {
   const [active, setActive] = useState("Overview");
   const [currentDateLabel, setCurrentDateLabel] = useState("");
+  const [greeting, setGreeting] = useState("Hello");
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
@@ -246,7 +247,9 @@ export default function SonusWorkspace() {
   }, [spendingRules, spendingRulesReady]);
 
   useEffect(() => {
-    setCurrentDateLabel(new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase());
+    const now = new Date();
+    setCurrentDateLabel(new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(now).toUpperCase());
+    setGreeting(now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening");
   }, []);
 
   useEffect(() => {
@@ -934,7 +937,7 @@ export default function SonusWorkspace() {
 
         <div className="ws-content">
           <div className="ws-page-heading">
-            <div><p className="ws-eyebrow"><span /> YOUR FINANCIAL OVERVIEW</p><h1>{active === "Overview" ? <>Good afternoon<span className="ws-period">.</span></> : active}<span className="ws-period">{active === "Overview" ? "" : "."}</span></h1><p>{sectionSubtitle}</p></div>
+            <div><p className="ws-eyebrow"><span /> YOUR FINANCIAL OVERVIEW</p><h1>{active === "Overview" ? <>{greeting}<span className="ws-period">.</span></> : active}<span className="ws-period">{active === "Overview" ? "" : "."}</span></h1><p>{sectionSubtitle}</p></div>
             <div className="ws-date"><span className="ws-live-dot" /> {currentDateLabel || "YOUR LOCAL DATE"}</div>
           </div>
 
