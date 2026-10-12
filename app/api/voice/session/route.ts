@@ -37,12 +37,21 @@ function hasAllowedOrigin(request: Request) {
   }
 }
 
+function realtimeEnabled() {
+  return Boolean(process.env.OPENAI_REALTIME_API_KEY) && process.env.OPENAI_REALTIME_ENABLED === "true";
+}
+
 export async function GET() {
   return NextResponse.json({
-    enabled: Boolean(process.env.OPENAI_REALTIME_API_KEY),
+    enabled: realtimeEnabled(),
     model: process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1",
-    mode: process.env.OPENAI_REALTIME_API_KEY ? "realtime" : "browser",
-  });
+    mode: realtimeEnabled() ? "realtime" : "browser",
+    reason: !process.env.OPENAI_REALTIME_API_KEY
+      ? "A dedicated OpenAI Realtime API key is not configured."
+      : process.env.OPENAI_REALTIME_ENABLED !== "true"
+        ? "Realtime voice is disabled until explicitly enabled on the server."
+        : undefined,
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -53,8 +62,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many voice sessions. Wait a minute and try again." }, { status: 429 });
   }
   const apiKey = process.env.OPENAI_REALTIME_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "Realtime voice is not configured. Set OPENAI_REALTIME_API_KEY on the server." }, { status: 503 });
+  if (!apiKey || process.env.OPENAI_REALTIME_ENABLED !== "true") {
+    return NextResponse.json({ error: "Realtime voice is disabled. Configure OPENAI_REALTIME_API_KEY and explicitly set OPENAI_REALTIME_ENABLED=true after reviewing access controls." }, { status: 503 });
   }
 
   const contentType = request.headers.get("content-type") || "";
