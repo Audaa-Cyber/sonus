@@ -23,7 +23,7 @@ type WalletBalances = { native: string | null; status: string; updatedAt: number
 type PaymentTx = { hash: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string };
 type StoredTransaction = { hash: string; from: string; to: string; amount: string; asset: string; network: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string; createdAt: number; updatedAt: number; blockNumber?: string; note?: string; policySummary?: string };
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
-const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
+const SUPPORTED_DRAFT_ASSETS = new Set(["USDC"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
 type SpeechRecognitionLike = { lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }> & { isFinal?: boolean }> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
@@ -438,40 +438,6 @@ export default function SonusWorkspace() {
     }
   }
 
-  async function estimatePaymentFee() {
-    if (!intent) return;
-    const provider = selectedProvider;
-    if (!provider || !walletAddress) { setNotice("Connect a wallet before estimating a transaction fee."); return; }
-    if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient is not a wallet address. Resolve it before estimating fees."); return; }
-    if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only."); return; }
-    const match = intent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
-    if (!match) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
-    const units6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
-    if (units6 <= 0n) { setNotice("Enter a positive USDC amount with no more than 6 decimal places."); return; }
-    const value = "0x" + (units6 * 1000000000000n).toString(16);
-    setBalanceBusy(true);
-    setNotice("Estimating gas on Arc Testnet. No transaction will be sent.");
-    try {
-      const chain = await provider.request({ method: "eth_chainId" }) as string;
-      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Switch the wallet to Arc Testnet before estimating this payment."); return; }
-      const accounts = await provider.request({ method: "eth_accounts" }) as string[];
-      const from = accounts?.[0];
-      if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before estimating."); return; }
-      const gasHex = await provider.request({ method: "eth_estimateGas", params: [{ from, to: intent.recipient, value }, "latest"] }) as string;
-      const priceHex = await provider.request({ method: "eth_gasPrice" }) as string;
-      const feeWei = BigInt(gasHex) * BigInt(priceHex);
-      const feeWhole = feeWei / 1000000000000000000n;
-      const feeFraction = (feeWei % 1000000000000000000n) / 1000000000000n;
-      const fee = Number(feeWhole) + Number(feeFraction) / 1000000;
-      const balanceHex = await provider.request({ method: "eth_getBalance", params: [from, "latest"] }) as string;
-      const enoughFunds = BigInt(balanceHex) >= BigInt(value) + feeWei;
-      const label = fee.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC (estimated)" + (enoughFunds ? "" : " · insufficient for amount + fee");
-      setIntent(current => current ? { ...current, feeEstimate: label } : current);
-      setWalletBalances(current => ({ ...current, native: (Number(BigInt(balanceHex) / 1000000000000n) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 }), status: enoughFunds ? "Balance covers amount + estimated fee at time of check" : "Warning: balance may not cover amount + estimated fee", updatedAt: Date.now() }));
-      setNotice((enoughFunds ? "Estimated fee received. " : "Warning: wallet balance appears insufficient for the amount plus estimated fee. ") + "This estimate can change; nothing was signed or sent.");
-    } catch (error) { setNotice("Could not estimate fee: " + (error instanceof Error ? error.message : "request failed") + ". No transaction was sent."); }
-    finally { setBalanceBusy(false); }
-  }
 
   function exportTransactionHistory() {
     if (!transactionHistory.length) { setNotice("There are no transaction records to export yet."); return; }
@@ -996,7 +962,7 @@ export default function SonusWorkspace() {
         body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name }) => name) })
       });
       const data = await response.json() as {
-        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; recipientLabel?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
         error?: string;
       };
       if (!response.ok) throw new Error(data.error || "Could not prepare a payment draft.");
