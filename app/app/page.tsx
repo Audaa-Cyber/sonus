@@ -76,6 +76,7 @@ export default function SonusWorkspace() {
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
   ]);
+  const messagesRef = useRef<Message[]>(messages);
   const [intent, setIntent] = useState<Intent | null>(null);
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [contactsReady, setContactsReady] = useState(false);
@@ -122,6 +123,10 @@ export default function SonusWorkspace() {
   const realtimeAssistantPlainText = useRef("");
   const [speaking, setSpeaking] = useState(false);
   const paymentSubmissionLock = useRef(false);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     return () => {
@@ -765,7 +770,7 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: clean, history: messages.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
       });
       const data = await response.json() as {
         reply?: string;
@@ -898,7 +903,7 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: transcript, history: messages.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
       });
       const data = await response.json() as {
         intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
