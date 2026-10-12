@@ -534,14 +534,15 @@ export default function SonusWorkspace() {
     setBalanceBusy(true);
     let submittedHash: string | null = null;
     let transactionSender: string | null = null;
-    setNotice("Rechecking network, recipient, balance, and fees before wallet approval.");
+    setNotice("Checking the payment, then opening your wallet for approval.");
     try {
-      const chain = await provider.request({ method: "eth_chainId" }) as string;
+      let chain = await provider.request({ method: "eth_chainId" }) as string;
       if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) {
         try { await switchChainAsync({ chainId: ARC_TESTNET_CHAIN_ID }); }
         catch { setNotice("Please switch your wallet to Arc Testnet to continue. Nothing was sent."); return; }
         const switchedChain = await provider.request({ method: "eth_chainId" }) as string;
         if (Number.parseInt(switchedChain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Your wallet is not on Arc Testnet yet. Nothing was sent."); return; }
+        chain = switchedChain;
       }
       const accounts = await provider.request({ method: "eth_accounts" }) as string[];
       const from = accounts?.[0];
@@ -658,7 +659,7 @@ export default function SonusWorkspace() {
     const backup = {
       format: "sonus-contacts-v1",
       exportedAt: new Date().toISOString(),
-      contacts: savedContacts.map(({ name }) => name)
+      contacts: savedContacts.map(({ name, address }) => ({ name, address }))
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
