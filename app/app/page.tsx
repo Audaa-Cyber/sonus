@@ -1,6 +1,7 @@
  "use client";
 
 import "./workspace.css";
+import { parseContactImport } from "@/lib/contact-import.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -8,7 +9,7 @@ import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
 import {
   Activity, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
   Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command,
-  Copy, Download, ExternalLink, Eye, EyeOff, Globe2, History, LayoutDashboard,
+  Copy, Download, ExternalLink, Eye, EyeOff, FileUp, Globe2, History, LayoutDashboard,
   LockKeyhole, Mic, MoreHorizontal, Plus, Search, Send, Settings2,
   ShieldCheck, Sparkles, TrendingDown, TrendingUp, Wallet, X, Zap, RefreshCw
 } from "lucide-react";
@@ -85,6 +86,8 @@ export default function SonusWorkspace() {
   const [contactNameInput, setContactNameInput] = useState("");
   const [contactAddressInput, setContactAddressInput] = useState("");
   const [contactFormError, setContactFormError] = useState("");
+  const [contactImportBusy, setContactImportBusy] = useState(false);
+  const contactImportRef = useRef<HTMLInputElement | null>(null);
   const [listening, setListening] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [notice, setNotice] = useState("");
@@ -668,6 +671,49 @@ export default function SonusWorkspace() {
     setNotice("Saved “" + name + "” in this browser only. The address is not identity-verified.");
   }
 
+  async function importContacts(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setContactFormError("");
+    setContactImportBusy(true);
+    try {
+      if (file.size > 2_000_000) throw new Error("Choose a contacts file under 2 MB.");
+      const result = parseContactImport(await file.text(), file.name) as {
+        contacts: Array<{ name: string; address: string }>;
+        rejected: number;
+      };
+      const merged = [...savedContacts];
+      let added = 0;
+      let duplicates = 0;
+      let conflicts = 0;
+      for (const imported of result.contacts) {
+        const addressMatch = merged.find(contact => contact.address.toLowerCase() === imported.address.toLowerCase());
+        const nameMatch = merged.find(contact => contact.name.toLowerCase() === imported.name.toLowerCase());
+        if (addressMatch) {
+          duplicates += 1;
+          continue;
+        }
+        if (nameMatch) {
+          conflicts += 1;
+          continue;
+        }
+        if (merged.length >= 200) break;
+        const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now() + added);
+        merged.push({ id, name: imported.name, address: imported.address, createdAt: Date.now() });
+        added += 1;
+      }
+      setSavedContacts(merged);
+      const capacitySkipped = Math.max(0, result.contacts.length - added - duplicates - conflicts);
+      setNotice(`Imported ${added} contact${added === 1 ? "" : "s"}. ${duplicates} duplicate address(es), ${conflicts} name conflict(s), ${result.rejected} invalid row(s), and ${capacitySkipped} over-capacity row(s) skipped.`);
+      if (!added && result.contacts.length === 0) setContactFormError("No valid contacts were found. Check the file's name and address columns.");
+    } catch (error) {
+      setContactFormError(error instanceof Error ? error.message : "Could not import this contacts file.");
+    } finally {
+      setContactImportBusy(false);
+    }
+  }
+
   function removeContact(contact: SavedContact) {
     setSavedContacts(current => current.filter(item => item.id !== contact.id));
     setNotice("Removed “" + contact.name + "” from this browser’s address book.");
@@ -900,6 +946,8 @@ export default function SonusWorkspace() {
 
             <section className="ws-contacts-panel" aria-labelledby="ws-contacts-title">
               <div className="ws-section-heading"><div><h2 id="ws-contacts-title">Saved recipients</h2><p>Resolve names you have explicitly saved on this browser</p></div><span className="ws-contact-count">{savedContacts.length} / 200</span></div>
+              <input ref={contactImportRef} type="file" accept=".csv,.json,application/json,text/csv" onChange={importContacts} hidden />
+              <div className="ws-contact-import-row"><button type="button" disabled={contactImportBusy || savedContacts.length >= 200} onClick={() => contactImportRef.current?.click()}><FileUp size={14} /> {contactImportBusy ? "Importing…" : "Import contacts"}</button><span>CSV or JSON export · validated locally</span></div>
               <form className="ws-contact-form" onSubmit={saveContact}>
                 <label><span>CONTACT NAME</span><input id="ws-contact-name-field" value={contactNameInput} onChange={event => setContactNameInput(event.target.value)} maxLength={50} placeholder="e.g. Alex" autoComplete="off" required /></label>
                 <label><span>EVM WALLET ADDRESS</span><input value={contactAddressInput} onChange={event => setContactAddressInput(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} required /></label>
