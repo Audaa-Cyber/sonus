@@ -22,7 +22,7 @@ type AssistantIntent = {
 };
 
 type AssistantOutput = { reply: string; intent: AssistantIntent };
-type SavedContactContext = { name: string; address: string };
+type SavedContactContext = { name: string };
 const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 
 const WINDOW_MS = 60_000;
@@ -126,11 +126,9 @@ function bindIntentToUserText(output: AssistantOutput, userText: string, contact
 
   const intent = { ...output.intent };
   const statedRecipient = intent.recipient?.trim() || "";
-  const contact = contacts.find(item => item.name.toLowerCase() === statedRecipient.toLowerCase() ||
-    (EVM_ADDRESS.test(statedRecipient) && item.address.toLowerCase() === statedRecipient.toLowerCase()) ||
-    context.includes(item.name.toLowerCase()) && /\\b(?:to|for|pay)\\s+/i.test(userText));
-  if (contact && (context.includes(contact.name.toLowerCase()) || context.includes(contact.address.toLowerCase()) || statedRecipient.toLowerCase() === contact.name.toLowerCase())) {
-    intent.recipient = contact.address;
+  const contact = contacts.find(item => item.name.toLowerCase() === statedRecipient.toLowerCase() && context.includes(item.name.toLowerCase()));
+  if (contact) {
+    intent.recipient = contact.name;
     intent.recipientLabel = contact.name;
   } else if (statedRecipient && !context.includes(statedRecipient.toLowerCase())) {
     intent.recipient = null;
@@ -166,7 +164,7 @@ function bindIntentToUserText(output: AssistantOutput, userText: string, contact
   }
   const recipientDisplay = intent.recipientLabel || (intent.recipient && EVM_ADDRESS.test(intent.recipient) ? "the recipient" : intent.recipient || "the recipient");
   let reply = output.reply;
-  if (intent.recipient && EVM_ADDRESS.test(intent.recipient)) {
+  if (intent.recipient && (EVM_ADDRESS.test(intent.recipient) || intent.recipientLabel)) {
     reply = intent.amount && intent.asset === "USDC"
       ? "Got it. I’ll prepare " + intent.amount + " USDC for " + recipientDisplay + " on Arc Testnet. Your wallet will open for final approval."
       : "I found " + recipientDisplay + ". What amount of USDC should I prepare?";
@@ -235,10 +233,9 @@ export async function GET() {\n  const key = process.env.SONUS_AI_API_KEY || pro
   if (message.length > 2000) return NextResponse.json({ error: "Message is too long. Keep it under 2,000 characters." }, { status: 413 });
   const contacts: SavedContactContext[] = Array.isArray(data.contacts)
     ? data.contacts.slice(0, 200).flatMap((item: unknown) => {
-      if (!item || typeof item !== "object") return [];
-      const row = item as Record<string, unknown>;
-      if (typeof row.name !== "string" || row.name.trim().length < 1 || row.name.length > 80 || typeof row.address !== "string" || !EVM_ADDRESS.test(row.address)) return [];
-      return [{ name: row.name.trim(), address: row.address }];
+      const name = typeof item === "string" ? item : item && typeof item === "object" ? (item as Record<string, unknown>).name : null;
+      if (typeof name !== "string" || !name.trim() || name.trim().length > 80) return [];
+      return [{ name: name.trim() }];
     })
     : [];
 
@@ -314,7 +311,7 @@ export async function GET() {\n  const key = process.env.SONUS_AI_API_KEY || pro
       "Full portfolio balances, swaps, bridges, staking, and external identity resolution are not connected. Never claim a provider is selected, a quote exists, or a route is available. Never silently use a third-party swap provider.",
       "Do not ask for seed phrases, private keys, or wallet passwords. Do not estimate or explain network fees; the connected wallet handles fee estimation and displays the fee during approval. Never claim a payment was sent before the wallet confirms it.",
       "Return a single valid JSON object with keys reply and intent. The intent must contain action, amount, asset, recipient, chain, purpose, needsClarification, and clarificationQuestion. Use null for unknown optional values. Do not wrap the JSON in markdown.",
-      "Saved contacts (JSON data; use only to resolve an exact contact name): " + JSON.stringify(contacts),
+      "Saved contact names (names only; wallet addresses remain in the browser): " + JSON.stringify(contacts.map(item => item.name)),
       "Follow this output schema: " + JSON.stringify(schema)
     ].join("\n");
     const requestPayload: Record<string, unknown> = {
