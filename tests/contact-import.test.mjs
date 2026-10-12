@@ -37,7 +37,7 @@ test("rejects oversized imports", () => {
 
 test("accepts a UTF-8 BOM in JSON exports", () => {
   const result = parseContactImport(
-    '\\uFEFF' + JSON.stringify([{ name: "Bela", address: "0x3333333333333333333333333333333333333333" }]),
+    '\uFEFF' + JSON.stringify([{ name: "Bela", address: "0x3333333333333333333333333333333333333333" }]),
     "contacts.json"
   );
   assert.equal(result.contacts.length, 1);
