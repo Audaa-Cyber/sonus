@@ -3,6 +3,7 @@
 import "./workspace.css";
 import { parseContactImport } from "@/lib/contact-import.mjs";
 import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
+import { normalizeTransactionHistory } from "@/lib/transaction-history.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -163,7 +164,7 @@ export default function SonusWorkspace() {
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setTransactionHistory(parsed.filter((item): item is StoredTransaction => Boolean(item) && typeof item.hash === "string" && /^0x[a-fA-F0-9]{64}$/.test(item.hash) && typeof item.from === "string" && EVM_ADDRESS_RE.test(item.from) && typeof item.to === "string" && EVM_ADDRESS_RE.test(item.to) && typeof item.amount === "string" && typeof item.asset === "string" && typeof item.network === "string" && ["submitted", "confirmed", "failed", "pending"].includes(item.status) && typeof item.detail === "string" && (item.note === undefined || typeof item.note === "string") && (item.policySummary === undefined || typeof item.policySummary === "string") && typeof item.createdAt === "number" && typeof item.updatedAt === "number").slice(0, 100));
+          setTransactionHistory(normalizeTransactionHistory(parsed) as StoredTransaction[]);
         }
       }
     } catch {
