@@ -212,6 +212,7 @@ export async function GET() {
   return NextResponse.json({ configured: Boolean(key), provider, model, mode: key ? "ai" : "fallback" }, { headers: { "Cache-Control": "no-store" } });
 }
 
+export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (contentLength > 20_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
   if (isRateLimited(request)) return NextResponse.json({ error: "Too many assistant requests. Wait a minute and try again." }, { status: 429 });
