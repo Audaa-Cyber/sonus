@@ -279,9 +279,11 @@ export default function SonusWorkspace() {
     let requestController: AbortController | null = null;
     const loadMarket = async () => {
       requestController?.abort();
-      requestController = new AbortController();
+      const controller = new AbortController();
+      requestController = controller;
+      setMarketLoading(true);
       try {
-        const response = await fetch("/api/market", { signal: requestController.signal, cache: "no-store" });
+        const response = await fetch("/api/market", { signal: controller.signal, cache: "no-store" });
         const data = await response.json() as MarketApiResponse;
         if (!response.ok || !Array.isArray(data.assets)) throw new Error(data.error || "Market data is unavailable.");
         if (!active) return;
@@ -294,7 +296,7 @@ export default function SonusWorkspace() {
         setMarketUpdatedAt(null);
         setMarketError(error instanceof Error ? error.message : "Market data is unavailable.");
       } finally {
-        if (active) setMarketLoading(false);
+        if (active && requestController === controller) setMarketLoading(false);
       }
     };
     void loadMarket();
