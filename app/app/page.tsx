@@ -908,7 +908,7 @@ export default function SonusWorkspace() {
           setListening(false);
           try { engine.stop(); } catch { /* recognition may already have ended */ }
           submitMessage(submitted);
-        }, 1500);
+        }, 2300);
       }
     };
     engine.onerror = (event: { error?: string }) => {
@@ -955,7 +955,9 @@ export default function SonusWorkspace() {
   }
 
   async function prepareRealtimePaymentDraft(transcript: string) {
-    if (!/\b(?:send|pay|transfer)\b/i.test(transcript)) return;
+    const latestUserTurn = messagesRef.current.filter(message => message.role === "user").slice(-1)[0]?.text || "";
+    const hasPaymentContext = Boolean(intentRef.current) || /\b(?:send|pay|transfer)\b/i.test(latestUserTurn);
+    if (!hasPaymentContext && !/\b(?:send|pay|transfer)\b/i.test(transcript)) return;
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
