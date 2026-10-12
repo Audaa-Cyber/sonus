@@ -142,7 +142,6 @@ export default function SonusWorkspace() {
   const realtimeMode = useRef(false);
   const realtimeAssistantAudioText = useRef("");
   const realtimeAssistantPlainText = useRef("");
-  const [speaking, setSpeaking] = useState(false);
   const paymentSubmissionLock = useRef(false);
   const { address: connectedAddress, chainId: connectedChainId, isConnected, connector } = useAccount();
   const { disconnect } = useDisconnect();
