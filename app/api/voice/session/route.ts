@@ -14,6 +14,9 @@ function getClientKey(request: Request) {
 
 function isRateLimited(request: Request) {
   const now = Date.now();
+  for (const [key, entry] of requestsByClient) {
+    if (entry.resetAt <= now) requestsByClient.delete(key);
+  }
   const key = getClientKey(request);
   const current = requestsByClient.get(key);
   if (!current || current.resetAt <= now) {
@@ -26,7 +29,7 @@ function isRateLimited(request: Request) {
 
 function hasAllowedOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  if (!origin) return true;
+  if (!origin) return false;
   try {
     return new URL(origin).host === new URL(request.url).host;
   } catch {
