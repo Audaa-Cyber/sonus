@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     audio: {
       input: {
         transcription: { model: "gpt-transcribe" },
-        turn_detection: { type: "semantic_vad", create_response: true, interrupt_response: true, eagerness: "medium" },
+        turn_detection: { type: "semantic_vad", create_response: true, interrupt_response: true, eagerness: "low" },
         noise_reduction: { type: "near_field" }
       },
       output: { voice: "marin" }
