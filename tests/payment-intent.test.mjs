@@ -28,7 +28,8 @@ test("does not classify explicit payment commands as hypotheticals", () => {
     "Send 25 USDC to Alex",
     "Please pay 10 USDC to 0x1111111111111111111111111111111111111111",
     "Transfer 2 ETH to my saved wallet",
-    "Would you send 25 USDC to Alex?"
+    "Would you send 25 USDC to Alex?",
+    "Send 25 USDC to Alex, don't forget to add a note"
   ]) {
     assert.equal(isNonActionablePaymentText(prompt), false, prompt);
   }
