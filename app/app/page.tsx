@@ -720,7 +720,7 @@ export default function SonusWorkspace() {
     const backup = {
       format: "sonus-contacts-v1",
       exportedAt: new Date().toISOString(),
-      contacts: savedContacts.map(({ name, address }) => ({ name, address }))
+      contacts: savedContacts.map(({ name }) => name)
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -888,7 +888,7 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name, address }) => ({ name, address })) })
+        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name }) => name) })
       });
       const data = await response.json() as {
         reply?: string;
@@ -1021,7 +1021,7 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name, address }) => ({ name, address })) })
+        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name }) => name) })
       });
       const data = await response.json() as {
         intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
@@ -1149,7 +1149,7 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/voice/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sdp: peer.localDescription?.sdp || offer.sdp, contacts: savedContacts.map(({ name, address }) => ({ name, address })), history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ sdp: peer.localDescription?.sdp || offer.sdp, contacts: savedContacts.map(({ name }) => name), history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({})) as { error?: string };
