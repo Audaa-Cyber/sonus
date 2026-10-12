@@ -19,7 +19,7 @@ type StoredTransaction = { hash: string; from: string; to: string; amount: strin
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
-type SpeechRecognitionLike = { lang: string; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
+type SpeechRecognitionLike = { lang: string; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }> & { isFinal?: boolean }> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type SpeechWindow = Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
 declare global { interface Window { ethereum?: Eip1193Provider } }
@@ -829,12 +829,7 @@ export default function SonusWorkspace() {
         ? "Microphone access was denied. Allow microphone access in browser settings and try again."
         : "Voice capture stopped (" + (event.error || "unknown error") + "). Tap the mic to try again.");
     };
-    engine.onend = () => {
-      setListening(false);
-      if (voiceConversationEnabled.current && !window.speechSynthesis?.speaking) {
-        voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 300);
-      }
-    };
+    engine.onend = () => setListening(false);
     recognition.current = engine;
     setListening(true);
     setNotice("Listening… speak naturally. Sonus will answer out loud; tap the mic to end voice mode.");
