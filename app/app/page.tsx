@@ -949,8 +949,12 @@ export default function SonusWorkspace() {
       };
       peer.onconnectionstatechange = () => {
         if (peer.connectionState === "failed" && voiceConversationEnabled.current) {
-          setNotice("Realtime voice connection dropped. Tap the microphone to reconnect.");
+          voiceConversationEnabled.current = false;
+          voiceReplyEnabled.current = false;
+          stopRealtimeVoice();
           setListening(false);
+          setSpeaking(false);
+          setNotice("Realtime voice connection dropped. Tap the microphone to start a new session.");
         }
       };
       const channel = peer.createDataChannel("oai-events");
