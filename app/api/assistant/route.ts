@@ -286,6 +286,7 @@ export async function POST(request: Request) {
     });
     let upstream = await fetch(endpoint, requestOptions(requestPayload));
     let providerErrorDetail = "";
+    let retriedWithoutJsonMode = false;
     if (!upstream.ok) {
       providerErrorDetail = await upstream.text();
       // Some OpenAI-compatible gateways accept Chat Completions but reject JSON mode.
@@ -293,6 +294,7 @@ export async function POST(request: Request) {
       if (upstream.status === 400 && /response_format|json_object|json mode|structured output/i.test(providerErrorDetail)) {
         const compatiblePayload = { ...requestPayload };
         delete compatiblePayload.response_format;
+        retriedWithoutJsonMode = true;
         upstream = await fetch(endpoint, requestOptions(compatiblePayload));
         providerErrorDetail = upstream.ok ? "" : await upstream.text();
       }
@@ -305,7 +307,9 @@ export async function POST(request: Request) {
         : upstream.status === 404
           ? "AI provider endpoint or model was not found. Check SONUS_AI_BASE_URL and SONUS_AI_MODEL."
           : upstream.status === 400
-            ? "AI provider rejected the request. Confirm the model supports Chat Completions and JSON mode."
+            ? retriedWithoutJsonMode
+              ? "AI provider rejected the request even without JSON mode. Confirm the model supports Chat Completions and check the provider's model documentation."
+              : "AI provider rejected the request. Confirm the model supports Chat Completions and JSON mode."
             : upstream.status === 429
               ? "AI provider rate limit or quota reached. Check your provider's usage and billing."
               : "AI provider request failed. Check the provider status and server logs.";
