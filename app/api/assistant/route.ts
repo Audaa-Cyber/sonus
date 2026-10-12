@@ -256,24 +256,38 @@ export async function POST(request: Request) {
       "Return a single valid JSON object with keys reply and intent. The intent must contain action, amount, asset, recipient, chain, purpose, needsClarification, and clarificationQuestion. Use null for unknown optional values. Do not wrap the JSON in markdown.",
       "Follow this output schema: " + JSON.stringify(schema)
     ].join("\n");
-    const upstream = await fetch(endpoint, {
+    const requestPayload: Record<string, unknown> = {
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...history,
+        { role: "user", content: message }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+      max_tokens: 900
+    };
+    const requestOptions = (payload: Record<string, unknown>) => ({
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
       signal: AbortSignal.timeout(25_000),
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: message }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-        max_tokens: 900
-      })
+      body: JSON.stringify(payload)
     });
+    let upstream = await fetch(endpoint, requestOptions(requestPayload));
+    let providerErrorDetail = "";
     if (!upstream.ok) {
-      const detail = await upstream.text();
+      providerErrorDetail = await upstream.text();
+      // Some OpenAI-compatible gateways accept Chat Completions but reject JSON mode.
+      // Retry only that compatibility failure; the response is still parsed and validated below.
+      if (upstream.status === 400 && /response_format|json_object|json mode|structured output/i.test(providerErrorDetail)) {
+        const compatiblePayload = { ...requestPayload };
+        delete compatiblePayload.response_format;
+        upstream = await fetch(endpoint, requestOptions(compatiblePayload));
+        providerErrorDetail = upstream.ok ? "" : await upstream.text();
+      }
+    }
+    if (!upstream.ok) {
+      const detail = providerErrorDetail;
       console.error("Sonus assistant provider error", { status: upstream.status, endpoint, model, detail: detail.slice(0, 500) });
       const errorMessage = upstream.status === 401 || upstream.status === 403
         ? "AI provider rejected the API key. Check SONUS_AI_API_KEY and the provider's key permissions."
@@ -297,7 +311,8 @@ export async function POST(request: Request) {
         ? rawContent.flatMap(part => typeof part.text === "string" ? [part.text] : []).join("\n")
         : "";
     if (!outputText) throw new Error("The provider returned no assistant text. Check that the selected model supports chat completions.");
-    const parsed = bindIntentToUserText(validateOutput(JSON.parse(outputText)), message);
+    const normalizedOutputText = outputText.trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/, "");
+    const parsed = bindIntentToUserText(validateOutput(JSON.parse(normalizedOutputText)), message);
     if (parsed.intent.action === "market") {
       const marketSummary = await getLiveMarketSummary();
       if (marketSummary) parsed.reply = marketSummary;
