@@ -134,7 +134,7 @@ The workspace chat calls a server-side `POST /api/assistant` route. It supports 
 ### Configure locally
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `SONUS_AI_API_KEY`, `SONUS_AI_BASE_URL`, and `SONUS_AI_MODEL` for your provider. The base URL must be the API root, not the full `/chat/completions` endpoint. For example, OpenAI uses `https://api.openai.com/v1`; OpenRouter uses `https://openrouter.ai/api/v1`.
+2. Set `SONUS_AI_API_KEY`, `SONUS_AI_BASE_URL`, and `SONUS_AI_MODEL` for your provider. The base URL must be the API root, not the full `/chat/completions` endpoint. For example, OpenAI uses `https://api.openai.com/v1`; OpenRouter uses `https://openrouter.ai/api/v1`; Clean APIs uses `https://cleanapis.com/v1`. Set `SONUS_AI_MODEL` (or `OPENAI_MODEL`) to a model ID enabled in your provider account.
 3. Restart the dev server after changing environment variables.
 
 The older `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` variables remain supported as fallbacks. Keep keys server-side only: never prefix them with `NEXT_PUBLIC_`, commit `.env.local`, or paste keys into chat. The configured provider must support the OpenAI-compatible Chat Completions endpoint and JSON mode. Without a key, the endpoint uses a clearly marked limited local fallback; that fallback is not an LLM.
