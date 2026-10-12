@@ -62,8 +62,15 @@ export default function SonusWorkspace() {
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
   ]);
   const messagesRef = useRef<Message[]>(messages);
-  const [intent, setIntent] = useState<Intent | null>(null);
+  const [intent, setIntentState] = useState<Intent | null>(null);
   const intentRef = useRef<Intent | null>(intent);
+  const setIntent = (next: Intent | null | ((current: Intent | null) => Intent | null)) => {
+    setIntentState(current => {
+      const updated = typeof next === "function" ? next(current) : next;
+      intentRef.current = updated;
+      return updated;
+    });
+  };
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [contactsReady, setContactsReady] = useState(false);
   const [contactNameInput, setContactNameInput] = useState("");
@@ -523,7 +530,7 @@ export default function SonusWorkspace() {
     const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before sending."); return; }
     if (paymentIntent.network !== "Arc Testnet" || paymentIntent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
-    if (!EVM_ADDRESS_RE.test(paymentIntent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
+    if (!EVM_ADDRESS_RE.test(paymentIntent.recipient)) { setNotice("I couldn’t match that name to a saved contact. Add the recipient to Saved recipients or provide their wallet address."); return; }
     const match = paymentIntent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
     if (!match) { setNotice("Enter a positive USDC amount with up to 6 decimal places."); return; }
     const amountUnits6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
@@ -778,7 +785,7 @@ export default function SonusWorkspace() {
   async function submitMessage(value = input) {
     const clean = value.trim();
     if (!clean) return;
-    const approvalPhrase = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(clean);
+    const approvalPhrase = /^(?:(?:yes|yeah|yep|approved?|confirmed?|confirm|i approve|i confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)(?:[ ,]+(?:please|now|then|it|ahead|that|the|payment|transaction|transfer|send|approve|confirm))*)[.! ]*$/i.test(clean);
     const pendingIntent = intentRef.current;
     if (pendingIntent && approvalPhrase) {
       setInput("");
@@ -853,6 +860,7 @@ export default function SonusWorkspace() {
         setNotice(parsed.clarificationQuestion || "Sonus identified a possible transfer, but the draft is incomplete. Provide a valid amount, asset, recipient, and network.");
       }
       if (data.mode === "fallback") setNotice("Sonus is running in limited mode because its AI connection is not configured. Add a valid AI provider key to enable natural conversation.");
+      setAssistantBusy(false);
     } catch (error) {
       console.error("Sonus assistant request failed", error);
       let health: { configured?: boolean; provider?: string; model?: string } | null = null;
@@ -908,7 +916,7 @@ export default function SonusWorkspace() {
           setListening(false);
           try { engine.stop(); } catch { /* recognition may already have ended */ }
           submitMessage(submitted);
-        }, 1500);
+        }, 2300);
       }
     };
     engine.onerror = (event: { error?: string }) => {
@@ -955,7 +963,14 @@ export default function SonusWorkspace() {
   }
 
   async function prepareRealtimePaymentDraft(transcript: string) {
-    if (!/\b(?:send|pay|transfer)\b/i.test(transcript)) return;
+    const latestUserTurn = messagesRef.current.filter(message => message.role === "user").slice(-1)[0]?.text || "";
+    const explicitPaymentRequest = /\b(?:send|pay|transfer)\b/i.test(transcript);
+    const hasPaymentContext = Boolean(intentRef.current) || /\b(?:send|pay|transfer)\b/i.test(latestUserTurn);
+    const likelyPaymentFollowUp = hasPaymentContext && (
+      /\d|\b(?:to|for|make it|change|same|recipient|amount|instead|use|that address)\b/i.test(transcript) ||
+      savedContacts.some(contact => transcript.toLowerCase().includes(contact.name.toLowerCase()))
+    );
+    if (!explicitPaymentRequest && !likelyPaymentFollowUp) return;
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
@@ -1034,7 +1049,7 @@ export default function SonusWorkspace() {
         if (payload.type === "conversation.item.input_audio_transcription.completed" && payload.transcript?.trim()) {
           const transcript = payload.transcript.trim();
           setMessages(current => [...current, { role: "user", text: transcript }]);
-          const approval = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(transcript);
+          const approval = /^(?:(?:yes|yeah|yep|approved?|confirmed?|confirm|i approve|i confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)(?:[ ,]+(?:please|now|then|it|ahead|that|the|payment|transaction|transfer|send|approve|confirm))*)[.! ]*$/i.test(transcript);
           if (approval && intentRef.current) {
             setMessages(current => [...current, { role: "assistant", text: "Opening your wallet now. Check the payment details and approve it there if everything looks right." }]);
             void sendArcTestnetPayment(intentRef.current);

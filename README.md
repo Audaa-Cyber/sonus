@@ -30,7 +30,7 @@ npm run dev
 
 ## V1 payment workspace status
 
-All work in this iteration is on `redesign/dark-signal-landing`. The `main` branch is not modified by these changes.
+Current voice and payment hardening work is on `fix/sonus-natural-voice-arc-only`. Review and merge that branch through its pull request after CI passes.
 
 Implemented in the workspace:
 - Browser EVM wallet connection and account/network change listeners.
@@ -38,8 +38,8 @@ Implemented in the workspace:
 - Live native USDC balance read through `eth_getBalance` when a wallet is connected to Arc Testnet.
 - Natural-language payment drafts with basic amount/token validation.
 - Recipient-format warning: a 40-byte EVM address shape is not proof of identity or ownership.
-- Native USDC fee estimate using `eth_estimateGas` and `eth_gasPrice` on Arc Testnet.
-- Basic comparison of the draft amount plus estimated fee against the wallet's current native balance.
+- The wallet estimates and displays native USDC network fees during its approval prompt; Sonus does not calculate or display a separate fee estimate.
+- A preflight check compares the requested amount against the connected wallet's native USDC balance. The wallet remains responsible for gas estimation and final approval.
 - Voice input through the browser's speech-recognition API where supported.
 - Local saved-recipient address book with name-to-address matching for explicitly saved contacts.
 - Browser-local transaction memory for payments submitted through Sonus, including the transaction hash and initial confirmation status.
@@ -57,10 +57,10 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 ### Current limitations
 
 - A wallet-approved native USDC transfer can be submitted on Arc Testnet after an in-page review and the wallet's own confirmation. Sonus does not receive or store private keys. This path is testnet-only.
-- Fee estimation and submission are currently limited to native USDC transfers on Arc Testnet.
+- Submission is limited to native USDC transfers on Arc Testnet. Sonus does not estimate fees; the connected wallet presents its own fee details.
 - Saved recipient names can resolve to addresses explicitly saved in the current browser. This address book is local to that browser, is not synced, and does not verify real-world identity or address ownership. Unknown names still require a wallet address.
 - The Portfolio page shows the connected wallet’s native USDC balance on Arc Testnet when refreshed, plus live market snapshots. It is not a full portfolio indexer: the chart and broader valuation remain illustrative, and tokens on other networks, NFTs, and DeFi positions are not included. Recent activity and the Activity page show transaction records created by Sonus after a wallet returns a transaction hash; they are stored locally in this browser, not synced, and are not a complete wallet history/indexer. Only the Arc Testnet native-USDC send flow currently writes records.
-- A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
+- Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
 - This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
 
 ## Local transaction memory
@@ -93,7 +93,7 @@ Manual cases to verify locally:
 
 ## Saved recipient address book
 
-The Overview workspace includes a small address book for EVM addresses. Contacts are stored in the current browser's `localStorage` under `sonus:contacts:v1`; they are not sent to Sonus servers or synced across devices. Payment requests can use an exact saved contact name, which is mapped locally to its stored address before the draft is shown. This is convenience-based name resolution only: it does not verify a person's identity or prove they control the address. Always confirm the full destination address before wallet approval. Do not use this local storage as a secure or shared contact database.
+The Overview workspace includes a small address book for EVM addresses. Contacts are stored in the current browser's `localStorage` under `sonus:contacts:v1` and are not synced across devices. Payment requests can use an exact saved contact name, which is mapped locally to its stored address before the draft is shown. Only contact names (not saved wallet addresses) are sent as assistant context so Sonus can understand the request. This is convenience-based name resolution only: it does not verify a person's identity or prove they control the address. Always confirm the destination in the wallet before approval. Do not use this local storage as a secure or shared contact database.
 
 ## Live market data
 
@@ -190,11 +190,11 @@ A Supabase SQL migration is included at `supabase/migrations/20261011000000_tran
 
 ## Voice conversation
 
-Use the microphone button in the workspace to start a hands-free voice conversation. Sonus checks whether the dedicated Realtime API is configured:
+Use the microphone button in the workspace to start a hands-free voice conversation. Sonus checks whether the dedicated Realtime API is configured. The browser fallback waits for a longer pause before submitting recognized speech and resumes listening after the spoken reply:
 
 - **Realtime mode:** Set `OPENAI_REALTIME_API_KEY` to an OpenAI API key with Realtime API access and explicitly set `OPENAI_REALTIME_ENABLED=true`. Sonus uses WebRTC for direct speech-to-speech audio, server-side voice instructions, automatic turn detection, live transcription events, and interruption support from the realtime session. Optionally set `OPENAI_REALTIME_MODEL`; the default is `gpt-realtime-2.1`.
 - **Browser fallback:** If no realtime key is configured or the realtime connection fails, Sonus uses browser speech recognition plus browser speech synthesis. That path has higher latency and depends on browser support and installed voices.
 
-`OPENAI_REALTIME_API_KEY` is deliberately separate from `OPENAI_API_KEY` and `OPENAI_BASE_URL`. A CleanAPIs proxy key used for regular chat is not a substitute for an OpenAI Realtime API key. Keep both keys server-side and never expose them in browser code. Realtime sessions can incur separate usage charges. The current workspace does not yet have user authentication, so the server-side opt-in is disabled by default. Do not enable realtime voice on a public deployment until authenticated access and durable rate limiting are in place; the current in-memory limit is only a basic safeguard, not production-grade abuse prevention. Configure billing limits before enabling it.
+`OPENAI_REALTIME_API_KEY` is deliberately separate from `OPENAI_API_KEY` and `OPENAI_BASE_URL`. A CleanAPIs proxy key used for regular chat is not a substitute for an OpenAI Realtime API key. The realtime session uses `gpt-transcribe` with semantic VAD so speech transcription and automatic turn detection are compatible. Keep both keys server-side and never expose them in browser code. Realtime sessions can incur separate usage charges. The current workspace does not yet have user authentication, so the server-side opt-in is disabled by default. Do not enable realtime voice on a public deployment until authenticated access and durable rate limiting are in place; the current in-memory limit is only a basic safeguard, not production-grade abuse prevention. Configure billing limits before enabling it.
 
 Voice can prepare a payment draft in the background, but it never sends a transaction automatically. Review the recipient, amount, asset, and network, then approve the exact transaction in the wallet. The current realtime voice model is a separate API model and should not be claimed to be identical to ChatGPT Voice.
