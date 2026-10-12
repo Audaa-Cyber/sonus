@@ -130,6 +130,7 @@ function bindIntentToUserText(output: AssistantOutput, userText: string, contact
   if (contact) {
     intent.recipient = contact.name;
     intent.recipientLabel = contact.name;
+    if (intent.amount && (intent.asset === "USDC" || !intent.asset)) { intent.needsClarification = false; intent.clarificationQuestion = null; }
   } else if (statedRecipient && !context.includes(statedRecipient.toLowerCase())) {
     intent.recipient = null;
     intent.recipientLabel = null;
@@ -152,10 +153,10 @@ function bindIntentToUserText(output: AssistantOutput, userText: string, contact
       intent.clarificationQuestion = "What exact amount should I prepare?";
     }
   }
-  if (intent.asset && !new RegExp(`\\b${intent.asset}\\b`, "i").test(userText)) {
+  if (intent.asset && intent.asset !== "USDC") {
     intent.asset = null;
     intent.needsClarification = true;
-    intent.clarificationQuestion = "Which asset should I use? Please specify the token.";
+    intent.clarificationQuestion = "Sonus currently supports USDC on Arc Testnet only. Should I prepare it in USDC?";
   }
   if (intent.chain && intent.chain !== "unknown" && !context.includes(intent.chain.toLowerCase())) {
     intent.chain = null;
