@@ -1,4 +1,5 @@
 import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
+import { readLimitedBody } from "@/lib/read-limited-body.mjs";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -24,33 +25,6 @@ type AssistantOutput = { reply: string; intent: AssistantIntent };
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 30;
 const requestWindows = new Map<string, { startedAt: number; count: number }>();
-
-async function readLimitedBody(request: Request, maxBytes: number): Promise<{ ok: true; text: string } | { ok: false; status: 400 | 413; error: string }> {
-  if (!request.body) return { ok: false, status: 400, error: "Request body must be valid JSON." };
-  const reader = request.body.getReader();
-  const decoder = new TextDecoder();
-  let text = "";
-  let bytesRead = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      bytesRead += value.byteLength;
-      if (bytesRead > maxBytes) {
-        await reader.cancel("Request body exceeds the allowed size.");
-        return { ok: false, status: 413, error: "Request is too large." };
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-    text += decoder.decode();
-    return { ok: true, text };
-  } catch {
-    return { ok: false, status: 400, error: "Request body must be valid JSON." };
-  } finally {
-    reader.releaseLock();
-  }
-}
 
 function isRateLimited(request: Request): boolean {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
