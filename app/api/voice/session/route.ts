@@ -67,14 +67,32 @@ export async function POST(request: Request) {
   }
 
   const contentType = request.headers.get("content-type") || "";
-  if (!contentType.includes("application/sdp")) {
-    return NextResponse.json({ error: "Expected an SDP offer." }, { status: 415 });
+  if (!contentType.includes("application/json")) return NextResponse.json({ error: "Expected a JSON voice-session request." }, { status: 415 });
+  const rawBody = await request.text();
+  if (!rawBody || rawBody.length > 150_000) return NextResponse.json({ error: "Invalid or oversized voice-session request." }, { status: 413 });
+  let body: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(rawBody) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid");
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Voice-session request must be valid JSON." }, { status: 400 });
   }
-  const sdp = await request.text();
-  if (!sdp || sdp.length > 100_000) {
-    return NextResponse.json({ error: "Invalid or oversized SDP offer." }, { status: 413 });
-  }
+  const sdp = typeof body.sdp === "string" ? body.sdp : "";
+  if (!sdp || sdp.length > 100_000) return NextResponse.json({ error: "Invalid or oversized SDP offer." }, { status: 413 });
+  const contacts = Array.isArray(body.contacts) ? body.contacts.slice(0, 200).flatMap((item: unknown) => {
+    const name = typeof item === "string" ? item : item && typeof item === "object" ? (item as Record<string, unknown>).name : null;
+    if (typeof name !== "string" || !name.trim() || name.trim().length > 80) return [];
+    return [name.trim()];
+  }) : [];
+  const history = Array.isArray(body.history) ? body.history.slice(-8).flatMap((item: unknown) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    if ((row.role !== "user" && row.role !== "assistant") || typeof row.content !== "string") return [];
+    return [{ role: row.role, content: row.content.slice(0, 800) }];
+  }) : [];
 
+  const session = {
   const session = {
     type: "realtime",
     model: process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1",
