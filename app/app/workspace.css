@@ -74,3 +74,5 @@
 .ws-risk-result>small{display:block;margin-top:10px;color:var(--ws-muted);line-height:1.7}
 @media(max-width:800px){.ws-intelligence-page{padding:0 18px 24px}.ws-intelligence-check{grid-template-columns:1fr}.ws-intelligence-updated{text-align:left}}
 @media(max-width:420px){.ws-intelligence-market-header{align-items:flex-start;flex-direction:column}.ws-intelligence-market-header button{width:100%}}
+
+.ws-contact-import-row{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:-3px 0 13px}.ws-contact-import-row button{display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--ws-line);border-radius:6px;background:#fff;color:var(--ws-ink);font-size:10px}.ws-contact-import-row button:disabled{opacity:.5;cursor:not-allowed}.ws-contact-import-row span{color:var(--ws-muted);font-size:9px}.ws-contact-form>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 11px;border:0;border-radius:6px;background:var(--ws-blue);color:#fff;font-size:10px}
