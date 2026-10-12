@@ -291,10 +291,11 @@ export async function POST(request: Request) {
     const outputText = typeof rawContent === "string"
       ? rawContent
       : Array.isArray(rawContent)
-        ? rawContent.map(part => part.text || "").join("\\n")
+        ? rawContent.map(part => part.text || "").join(String.fromCharCode(10))
         : "";
     if (!outputText) throw new Error(result.error?.message || "No assistant content was returned.");
-    const jsonText = outputText.trim().replace(/^\`\`\`(?:json)?\\s*/i, "").replace(/\\s*\`\`\`$/, "");
+    const fence = String.fromCharCode(96).repeat(3);
+    const jsonText = outputText.trim().replace(new RegExp("^" + fence + "(?:json)?\\s*", "i"), "").replace(new RegExp("\\s*" + fence + "$"), "");
     const parsed = bindIntentToUserText(validateOutput(JSON.parse(jsonText)), message);
     if (parsed.intent.action === "market") {
       const marketSummary = await getLiveMarketSummary();
