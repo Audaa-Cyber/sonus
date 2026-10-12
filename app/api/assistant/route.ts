@@ -111,16 +111,16 @@ function localFallback(message: string): AssistantOutput {
   return { reply: "I can help plan transfers, swaps, bridges, wallet-safety checks, and crypto concepts. Live market data and most execution routes are not connected yet. What are you trying to accomplish?", intent: { action: "unknown", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: true, clarificationQuestion: "What are you trying to accomplish?" } };
 }
 
-function bindIntentToUserText(output: AssistantOutput, userText: string, contacts: SavedContactContext[] = []): AssistantOutput {
-  if (output.intent.action !== "transfer") return output;
-  const context = userText.toLowerCase();
-  if (isNonActionablePaymentText(userText)) {
-    return {
-      reply: "I can help assess the risks, but I will not turn advisory, hypothetical, or negative wording into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset.",
-      intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null }
-    };
-  }
-  if (!/\b(send|pay|transfer)\b/i.test(userText)) {
+function bindIntentToUserText(output: AssistantOutput, userText: string, contacts: SavedContactContext[] = [], history: Array<{ role: "user" | "assistant"; content: string }> = []): AssistantOutput {
+  const priorUserContext = history.filter(item => item.role === "user").slice(-4).map(item => item.content).join(" ");
+  const isFollowUp = !/\b(send|pay|transfer)\b/i.test(userText) &&
+    !/\b(swap|bridge|market|price|balance|portfolio|explain|what|how|why|check|wallet|risk)\b/i.test(userText) &&
+    userText.length <= 160 && /\b(send|pay|transfer)\b/i.test(priorUserContext);
+  const effectiveText = isFollowUp ? priorUserContext + " " + userText : userText;
+  if (output.intent.action !== "transfer" && !isFollowUp) return output;
+  if (isFollowUp && output.intent.action !== "transfer") output = { ...output, intent: { ...output.intent, action: "transfer" } };
+  const context = effectiveText.toLowerCase();
+  if (!/\b(send|pay|transfer)\b/i.test(userText) && !isFollowUp) {
     return { ...output, intent: { ...output.intent, action: "unknown", amount: null, asset: null, recipient: null, needsClarification: true, clarificationQuestion: "Are you asking to prepare a transfer, or just discussing one?" } };
   }
 
@@ -137,26 +137,20 @@ function bindIntentToUserText(output: AssistantOutput, userText: string, contact
     intent.needsClarification = true;
     intent.clarificationQuestion = "Who should I send it to?";
   }
-  // Sonus V1 is permanently scoped to native USDC on Arc Testnet.
   intent.chain = "Arc Testnet";
   if (!intent.asset) intent.asset = "USDC";
   if (intent.asset !== "USDC") {
     intent.asset = null;
     intent.needsClarification = true;
-    intent.clarificationQuestion = "Sonus currently sends USDC on Arc Testnet only. Should I prepare it in USDC?";
+    intent.clarificationQuestion = "Sonus currently supports USDC on Arc Testnet only. Should I prepare it in USDC?";
   }
   if (intent.amount) {
-    const numbers = userText.match(/(?:\$\s*)?\d+(?:\.\d+)?|\.\d+/g) ?? [];
+    const numbers = effectiveText.match(/(?:\$\s*)?\d+(?:\.\d+)?|\.\d+/g) ?? [];
     if (!numbers.some(token => Number(token.replace(/^\$\s*/, "")) === Number(intent.amount))) {
       intent.amount = null;
       intent.needsClarification = true;
       intent.clarificationQuestion = "What exact amount should I prepare?";
     }
-  }
-  if (intent.asset && intent.asset !== "USDC") {
-    intent.asset = null;
-    intent.needsClarification = true;
-    intent.clarificationQuestion = "Sonus currently supports USDC on Arc Testnet only. Should I prepare it in USDC?";
   }
   const recipientDisplay = intent.recipientLabel || (intent.recipient && EVM_ADDRESS.test(intent.recipient) ? "the recipient" : intent.recipient || "the recipient");
   let reply = output.reply;
@@ -172,7 +166,6 @@ function bindIntentToUserText(output: AssistantOutput, userText: string, contact
   reply = reply.replace(/0x[a-fA-F0-9]{40}/g, "the recipient address");
   return { ...output, reply, intent };
 }
-
 function validateOutput(value: unknown): AssistantOutput {
   if (!value || typeof value !== "object") throw new Error("Assistant returned an invalid response.");
   const raw = value as Record<string, unknown>;
@@ -241,17 +234,6 @@ export async function POST(request: Request) {
     })
     : [];
 
-  const apiKey = process.env.SONUS_AI_API_KEY || process.env.CLEANAPIS_API_KEY || process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    const fallback = bindIntentToUserText(localFallback(message), message, contacts);
-    if (fallback.intent.action === "market") {
-      const marketSummary = await getLiveMarketSummary();
-      if (marketSummary) fallback.reply = marketSummary;
-      else fallback.reply += " Live market data could not be retrieved just now.";
-    }
-    return NextResponse.json({ ...fallback, mode: "fallback" });
-  }
-
   const history = Array.isArray(data.history)
     ? data.history.slice(-8).flatMap((item) => {
       if (!item || typeof item !== "object") return [];
@@ -260,6 +242,19 @@ export async function POST(request: Request) {
       return [{ role: row.role, content: row.content.slice(0, 1500) }];
     })
     : [];
+
+  const apiKey = process.env.SONUS_AI_API_KEY || process.env.CLEANAPIS_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    const fallback = bindIntentToUserText(localFallback(message), message, contacts, history);
+    if (fallback.intent.action === "market") {
+      const marketSummary = await getLiveMarketSummary();
+      if (marketSummary) fallback.reply = marketSummary;
+      else fallback.reply += " Live market data could not be retrieved just now.";
+    }
+    return NextResponse.json({ ...fallback, mode: "fallback" });
+  }
+
+
 
   const schema = {
     type: "object",
@@ -376,7 +371,7 @@ export async function POST(request: Request) {
         : "";
     if (!outputText) throw new Error("The provider returned no assistant text. Check that the selected model supports chat completions.");
     const normalizedOutputText = outputText.trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/, "");
-    const parsed = bindIntentToUserText(validateOutput(JSON.parse(normalizedOutputText)), message, contacts);
+    const parsed = bindIntentToUserText(validateOutput(JSON.parse(normalizedOutputText)), message, contacts, history);
     if (parsed.intent.action === "market") {
       const marketSummary = await getLiveMarketSummary();
       if (marketSummary) parsed.reply = marketSummary;
