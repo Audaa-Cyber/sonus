@@ -11,7 +11,10 @@ test("classifies advisory, hypothetical, and negative language as non-actionable
     "Do you think I should pay this invoice?",
     "I do not want to send 25 USDC to Alex",
     "Do not transfer funds to that address",
-    "I will not pay this invoice"
+    "I will not pay this invoice",
+    "I don't think I should send 25 USDC to Alex",
+    "I am not sure whether I should transfer funds",
+    "Is it a good idea to pay this invoice?"
   ]) {
     assert.equal(isNonActionablePaymentText(prompt), true, prompt);
   }
