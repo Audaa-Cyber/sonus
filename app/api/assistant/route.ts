@@ -211,7 +211,15 @@ function validateOutput(value: unknown): AssistantOutput {
   };
 }
 
-export async function GET() {\n  const key = process.env.SONUS_AI_API_KEY || process.env.OPENAI_API_KEY;\n  const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";\n  const model = process.env.SONUS_AI_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";\n  let provider = "OpenAI-compatible provider";\n  try { provider = new URL(configuredBaseUrl).host; } catch { provider = "Invalid provider URL"; }\n  return NextResponse.json({ configured: Boolean(key), provider, model, mode: key ? "ai" : "fallback" }, { headers: { "Cache-Control": "no-store" } });\n}\n\nexport async function POST(request: Request) {
+export async function GET() {
+  const key = process.env.SONUS_AI_API_KEY || process.env.CLEANAPIS_API_KEY || process.env.OPENAI_API_KEY;
+  const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || process.env.CLEANAPIS_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+  const model = process.env.SONUS_AI_MODEL || process.env.CLEANAPIS_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  let provider = "OpenAI-compatible provider";
+  try { provider = new URL(configuredBaseUrl).host; } catch { provider = "Invalid provider URL"; }
+  return NextResponse.json({ configured: Boolean(key), provider, model, mode: key ? "ai" : "fallback" }, { headers: { "Cache-Control": "no-store" } });
+}
+
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (contentLength > 20_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
   if (isRateLimited(request)) return NextResponse.json({ error: "Too many assistant requests. Wait a minute and try again." }, { status: 429 });
@@ -240,7 +248,7 @@ export async function GET() {\n  const key = process.env.SONUS_AI_API_KEY || pro
     })
     : [];
 
-  const apiKey = process.env.SONUS_AI_API_KEY || process.env.OPENAI_API_KEY;
+  const apiKey = process.env.SONUS_AI_API_KEY || process.env.CLEANAPIS_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
     const fallback = bindIntentToUserText(localFallback(message), message, contacts);
     if (fallback.intent.action === "market") {
@@ -286,8 +294,8 @@ export async function GET() {\n  const key = process.env.SONUS_AI_API_KEY || pro
   };
 
   try {
-    const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-    const model = process.env.SONUS_AI_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";
+    const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || process.env.CLEANAPIS_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+    const model = process.env.SONUS_AI_MODEL || process.env.CLEANAPIS_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini";
     const baseUrl = configuredBaseUrl.trim().replace(/\/+$/, "").replace(/\/(?:chat\/completions|responses)$/i, "");
     let parsedBaseUrl: URL;
     try {
