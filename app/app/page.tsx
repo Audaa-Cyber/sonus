@@ -19,7 +19,7 @@ type StoredTransaction = { hash: string; from: string; to: string; amount: strin
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
-type SpeechRecognitionLike = { lang: string; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }> & { isFinal?: boolean }> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
+type SpeechRecognitionLike = { lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }> & { isFinal?: boolean }> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type SpeechWindow = Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
 declare global { interface Window { ethereum?: Eip1193Provider } }
@@ -112,6 +112,7 @@ export default function SonusWorkspace() {
   const voiceConversationEnabled = useRef(false);
   const voiceReplyEnabled = useRef(false);
   const voiceRestartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const paymentSubmissionLock = useRef(false);
 
@@ -120,6 +121,7 @@ export default function SonusWorkspace() {
       voiceConversationEnabled.current = false;
       voiceReplyEnabled.current = false;
       if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
       recognition.current?.stop();
       if (typeof window !== "undefined") window.speechSynthesis?.cancel();
     };
@@ -689,7 +691,7 @@ export default function SonusWorkspace() {
     if (!voiceReplyEnabled.current || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
-    const utterance = new SpeechSynthesisUtterance(text.replace(/\\n+/g, ". "));
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\n+/g, ". "));
     utterance.lang = "en-US";
     utterance.rate = 1.04;
     utterance.pitch = 1;
@@ -795,28 +797,40 @@ export default function SonusWorkspace() {
     }
     const engine = new SpeechRecognition();
     engine.lang = "en-US";
+    engine.continuous = true;
     engine.interimResults = true;
     engine.maxAlternatives = 1;
-    let finalTranscript = "";
-    let submittedTranscript = false;
+    let currentTranscript = "";
+    let latestIsFinal = false;
     engine.onresult = (event) => {
       const results = event.results;
       if (!results) return;
-      let interim = "";
+      const finalParts: string[] = [];
+      const interimParts: string[] = [];
       for (let index = 0; index < results.length; index++) {
         const result = results[index];
-        const transcript = result?.[0]?.transcript || "";
-        if (result?.isFinal) finalTranscript += transcript + " ";
-        else interim += transcript;
+        const transcript = result?.[0]?.transcript?.trim() || "";
+        if (!transcript) continue;
+        if (result?.isFinal) finalParts.push(transcript);
+        else interimParts.push(transcript);
       }
-      const visibleTranscript = (finalTranscript + interim).trim();
-      if (visibleTranscript) setInput(visibleTranscript);
-      if (finalTranscript.trim() && !submittedTranscript) {
-        submittedTranscript = true;
-        const submitted = finalTranscript.trim();
-        setListening(false);
-        try { engine.stop(); } catch { /* recognition may already have ended */ }
-        submitMessage(submitted);
+      const finalTranscript = finalParts.join(" ").trim();
+      const interimTranscript = interimParts.join(" ").trim();
+      currentTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
+      latestIsFinal = Boolean(finalTranscript) && !interimTranscript;
+      if (currentTranscript) setInput(currentTranscript);
+
+      if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
+      if (latestIsFinal) {
+        voiceSubmitTimer.current = setTimeout(() => {
+          if (!voiceConversationEnabled.current || !currentTranscript.trim()) return;
+          const submitted = currentTranscript.trim();
+          currentTranscript = "";
+          latestIsFinal = false;
+          setListening(false);
+          try { engine.stop(); } catch { /* recognition may already have ended */ }
+          submitMessage(submitted);
+        }, 650);
       }
     };
     engine.onerror = (event: { error?: string }) => {
@@ -850,6 +864,7 @@ export default function SonusWorkspace() {
       voiceConversationEnabled.current = false;
       voiceReplyEnabled.current = false;
       if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
       recognition.current?.stop();
       window.speechSynthesis?.cancel();
       setListening(false);
