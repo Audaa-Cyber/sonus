@@ -26,7 +26,7 @@ type StoredTransaction = { hash: string; from: string; to: string; amount: strin
 const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const SUPPORTED_DRAFT_ASSETS = new Set(["USDC", "USDT", "ETH", "SOL"]);
 type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void };
-type SpeechRecognitionLike = { lang: string; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
+type SpeechRecognitionLike = { lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }> & { isFinal?: boolean }> }) => void) | null; onerror: ((event: { error?: string }) => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type SpeechWindow = Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
 const ARC_TESTNET_CHAIN_ID = 5042002;
@@ -89,6 +89,7 @@ export default function SonusWorkspace() {
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
   ]);
+  const messagesRef = useRef<Message[]>(messages);
   const [intent, setIntent] = useState<Intent | null>(null);
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [contactsReady, setContactsReady] = useState(false);
@@ -130,12 +131,39 @@ export default function SonusWorkspace() {
   const [riskCheckBusy, setRiskCheckBusy] = useState(false);
   const [riskCheckResult, setRiskCheckResult] = useState<RiskPreflightResponse | null>(null);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
-  const voiceReplyPending = useRef(false);
+  const voiceConversationEnabled = useRef(false);
+  const voiceReplyEnabled = useRef(false);
+  const voiceRestartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimePeer = useRef<RTCPeerConnection | null>(null);
+  const realtimeStream = useRef<MediaStream | null>(null);
+  const realtimeChannel = useRef<RTCDataChannel | null>(null);
+  const realtimeAudio = useRef<HTMLAudioElement | null>(null);
+  const realtimeMode = useRef(false);
+  const realtimeAssistantAudioText = useRef("");
+  const realtimeAssistantPlainText = useRef("");
+  const [speaking, setSpeaking] = useState(false);
   const paymentSubmissionLock = useRef(false);
   const { address: connectedAddress, chainId: connectedChainId, isConnected, connector } = useAccount();
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
+      recognition.current?.stop();
+      stopRealtimeVoice();
+      if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    };
+  }, []);
 
   const visibleTransactions = transactionHistory.filter(item => {
     const query = historyQuery.trim().toLowerCase();
@@ -782,30 +810,35 @@ export default function SonusWorkspace() {
     Settings: "Make Sonus work your way."
   } as Record<string, string>)[active] || "Your money, in context.", [active]);
 
-  useEffect(() => {
-    if (!voiceReplyPending.current || assistantBusy) return;
-    const lastAssistantMessage = [...messages].reverse().find(message => message.role === "assistant");
-    if (!lastAssistantMessage) return;
-    voiceReplyPending.current = false;
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setNotice("Speech playback is not supported in this browser. You can still read the reply on screen.");
+  function speakAssistantReply(text: string) {
+    if (!voiceReplyEnabled.current || realtimeMode.current || typeof window === "undefined") return;
+    if (!("speechSynthesis" in window)) {
+      setNotice("Voice replies are not supported in this browser. Sonus can still show text replies.");
+      if (voiceConversationEnabled.current) voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 250);
       return;
     }
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(lastAssistantMessage.text.replace(/\n+/g, ". "));
-    utterance.rate = 1.02;
+    if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\n+/g, ". "));
+    utterance.lang = "en-US";
+    utterance.rate = 1.04;
     utterance.pitch = 1;
-    utterance.volume = 1;
     utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
+    utterance.onerror = () => {
+      setSpeaking(false);
+      if (voiceConversationEnabled.current) voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 250);
+    };
+    utterance.onend = () => {
+      setSpeaking(false);
+      if (voiceConversationEnabled.current) voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 250);
+    };
     window.speechSynthesis.speak(utterance);
-  }, [messages, assistantBusy]);
+  }
 
-  useEffect(() => () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
-    recognition.current?.stop();
-  }, []);
+  function appendAssistantReply(text: string) {
+    setMessages(current => [...current, { role: "assistant", text }]);
+    speakAssistantReply(text);
+  }
 
   async function submitMessage(value = input) {
     const clean = value.trim();
@@ -838,7 +871,7 @@ export default function SonusWorkspace() {
         : transactionHistory.length
           ? "I couldn't find a matching transaction note in this browser's Sonus history. Try a payment amount or a word from its note, or open Activity to search your saved records. Sonus only knows transactions submitted through this browser; this isn't your complete wallet history."
           : "There are no Sonus transaction records in this browser yet. After a wallet-approved Arc Testnet payment is recorded, you can add a note in Activity and ask me about it here.";
-      setMessages(current => [...current, { role: "assistant", text: answer }]);
+      appendAssistantReply(answer);
       setAssistantBusy(false);
       setNotice("Answered from browser-local transaction memory. Transaction records and notes were not sent to the assistant API.");
       return;
@@ -848,7 +881,7 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: clean, history: messages.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
       });
       const data = await response.json() as {
         reply?: string;
@@ -857,7 +890,7 @@ export default function SonusWorkspace() {
         error?: string;
       };
       if (!response.ok) throw new Error(data.error || "Assistant request failed.");
-      setMessages(current => [...current, { role: "assistant", text: data.reply || "I couldn't produce a useful response. Please try rephrasing that." }]);
+      appendAssistantReply(data.reply || "I couldn't produce a useful response. Please try rephrasing that.");
       const parsed = data.intent;
       if (parsed?.action === "transfer" && parsed.amount && parsed.recipient && parsed.asset && SUPPORTED_DRAFT_ASSETS.has(parsed.asset.toUpperCase())) {
         const resolvedRecipient = resolveSavedRecipient(parsed.recipient);
@@ -876,7 +909,7 @@ export default function SonusWorkspace() {
       if (data.mode === "fallback") setNotice("AI mode is not configured yet. Sonus used its local assistant fallback; responses are limited.");
     } catch (error) {
       const result = buildReply(clean);
-      setMessages(current => [...current, { role: "assistant", text: result.reply + "\\n\\nThe AI service is unavailable right now, so this response came from the local fallback." }]);
+      appendAssistantReply(result.reply + "\n\nThe AI service is unavailable right now, so this response came from the local fallback.");
       if (result.intent) { setIntent({ ...result.intent, recipient: resolveSavedRecipient(result.intent.recipient) }); setPaymentTx(null); }
       setNotice("Assistant API unavailable: " + (error instanceof Error ? error.message : "request failed"));
     } finally {
@@ -884,58 +917,271 @@ export default function SonusWorkspace() {
     }
   }
 
-  function startVoice() {
-    if (typeof window === "undefined") return;
+  function beginVoiceCapture(startNotice = "Listening… browser voice mode. Replies may have a short pause; tap the mic to end voice mode.") {
+    if (typeof window === "undefined" || !voiceConversationEnabled.current) return;
     const speechWindow = window as SpeechWindow;
     const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (listening) {
-      recognition.current?.stop();
-      setListening(false);
-      voiceReplyPending.current = false;
-      return;
-    }
-    if (assistantBusy) {
-      setNotice("Wait for Sonus to finish its current response before starting voice input.");
-      return;
-    }
     if (!SpeechRecognition) {
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
       setNotice("Voice input is not supported in this browser. Try a recent version of Chrome.");
       return;
     }
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    setSpeaking(false);
-    voiceReplyPending.current = true;
     const engine = new SpeechRecognition();
     engine.lang = "en-US";
-    engine.interimResults = false;
+    engine.continuous = true;
+    engine.interimResults = true;
     engine.maxAlternatives = 1;
+    let currentTranscript = "";
+    let latestIsFinal = false;
     engine.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript?.trim() || "";
-      setListening(false);
-      if (transcript) {
-        setInput(transcript);
-        void submitMessage(transcript);
-      } else {
-        voiceReplyPending.current = false;
-        setNotice("I didn’t catch that. Tap the microphone and try again.");
+      const results = event.results;
+      if (!results) return;
+      const finalParts: string[] = [];
+      const interimParts: string[] = [];
+      for (let index = 0; index < results.length; index++) {
+        const result = results[index];
+        const transcript = result?.[0]?.transcript?.trim() || "";
+        if (!transcript) continue;
+        if (result?.isFinal) finalParts.push(transcript);
+        else interimParts.push(transcript);
+      }
+      const finalTranscript = finalParts.join(" ").trim();
+      const interimTranscript = interimParts.join(" ").trim();
+      currentTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(" ").trim();
+      latestIsFinal = Boolean(finalTranscript) && !interimTranscript;
+      if (currentTranscript) setInput(currentTranscript);
+
+      if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
+      if (latestIsFinal) {
+        voiceSubmitTimer.current = setTimeout(() => {
+          if (!voiceConversationEnabled.current || !currentTranscript.trim()) return;
+          const submitted = currentTranscript.trim();
+          currentTranscript = "";
+          latestIsFinal = false;
+          setListening(false);
+          try { engine.stop(); } catch { /* recognition may already have ended */ }
+          submitMessage(submitted);
+        }, 650);
       }
     };
-    engine.onerror = () => {
-      voiceReplyPending.current = false;
+    engine.onerror = (event: { error?: string }) => {
       setListening(false);
-      setNotice("Could not capture speech. Check microphone permission and try again.");
+      if (!voiceConversationEnabled.current) return;
+      if (event.error === "no-speech" && voiceConversationEnabled.current) {
+        voiceRestartTimer.current = setTimeout(() => beginVoiceCapture(), 350);
+        return;
+      }
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      setNotice(event.error === "not-allowed"
+        ? "Microphone access was denied. Allow microphone access in browser settings and try again."
+        : "Voice capture stopped (" + (event.error || "unknown error") + "). Tap the mic to try again.");
     };
     engine.onend = () => setListening(false);
     recognition.current = engine;
     setListening(true);
-    setNotice("Listening… speak your request.");
-    try {
-      engine.start();
-    } catch {
-      voiceReplyPending.current = false;
+    setNotice(startNotice);
+    try { engine.start(); }
+    catch {
       setListening(false);
-      setNotice("The microphone could not start. Check permission and try again.");
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      setNotice("Could not start the microphone. Check browser permissions and try again.");
     }
+  }
+
+  function stopRealtimeVoice() {
+    realtimeMode.current = false;
+    realtimeChannel.current?.close();
+    realtimePeer.current?.close();
+    realtimeStream.current?.getTracks().forEach(track => track.stop());
+    if (realtimeAudio.current) {
+      realtimeAudio.current.pause();
+      realtimeAudio.current.srcObject = null;
+    }
+    realtimeChannel.current = null;
+    realtimePeer.current = null;
+    realtimeStream.current = null;
+    realtimeAudio.current = null;
+    realtimeAssistantAudioText.current = "";
+    realtimeAssistantPlainText.current = "";
+  }
+
+  async function prepareRealtimePaymentDraft(transcript: string) {
+    if (!/\b(?:send|pay|transfer)\b/i.test(transcript)) return;
+    try {
+      const response = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+      });
+      const data = await response.json() as {
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "Could not prepare a payment draft.");
+      const parsed = data.intent;
+      if (parsed?.action !== "transfer") return;
+      if (parsed.amount && parsed.recipient && parsed.asset && SUPPORTED_DRAFT_ASSETS.has(parsed.asset.toUpperCase())) {
+        const resolvedRecipient = resolveSavedRecipient(parsed.recipient);
+        setIntent({
+          recipient: resolvedRecipient,
+          amount: parsed.amount,
+          asset: parsed.asset.toUpperCase(),
+          network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
+          reason: parsed.purpose || "Not specified"
+        });
+        setPaymentTx(null);
+        setNotice("Voice request prepared a payment draft. Review the recipient, asset, network, and amount before approving anything.");
+      } else {
+        setNotice(parsed.clarificationQuestion || "I heard a possible payment request, but the draft needs more details. Check the chat before continuing.");
+      }
+    } catch (error) {
+      setNotice("I heard your payment request, but couldn't prepare its draft: " + (error instanceof Error ? error.message : "assistant unavailable"));
+    }
+  }
+
+  async function startRealtimeVoice() {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") {
+        throw new Error("This browser does not support WebRTC microphone access.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!voiceConversationEnabled.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      const peer = new RTCPeerConnection();
+      realtimePeer.current = peer;
+      realtimeStream.current = stream;
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      peer.ontrack = event => {
+        const audio = new Audio();
+        audio.autoplay = true;
+        audio.srcObject = event.streams[0];
+        realtimeAudio.current = audio;
+        void audio.play().catch(() => setNotice("Voice is connected, but browser audio playback was blocked. Check the tab's sound settings."));
+      };
+      peer.onconnectionstatechange = () => {
+        if (peer.connectionState === "failed" && voiceConversationEnabled.current) {
+          voiceConversationEnabled.current = false;
+          voiceReplyEnabled.current = false;
+          stopRealtimeVoice();
+          setListening(false);
+          setSpeaking(false);
+          setNotice("Realtime voice connection dropped. Tap the microphone to start a new session.");
+        }
+      };
+      const channel = peer.createDataChannel("oai-events");
+      realtimeChannel.current = channel;
+      channel.onopen = () => {
+        if (!voiceConversationEnabled.current) return;
+        realtimeMode.current = true;
+        setListening(true);
+        setNotice("Realtime voice connected. Speak naturally and interrupt when you need to.");
+      };
+      channel.onmessage = event => {
+        let payload: { type?: string; transcript?: string; delta?: string; error?: { message?: string } };
+        try { payload = JSON.parse(String(event.data)); } catch { return; }
+        if (payload.type === "conversation.item.input_audio_transcription.completed" && payload.transcript?.trim()) {
+          const transcript = payload.transcript.trim();
+          setMessages(current => [...current, { role: "user", text: transcript }]);
+          void prepareRealtimePaymentDraft(transcript);
+        } else if (payload.type === "response.output_audio_transcript.delta" && payload.delta) {
+          realtimeAssistantAudioText.current += payload.delta;
+        } else if (payload.type === "response.output_audio_transcript.done" && payload.transcript) {
+          realtimeAssistantAudioText.current = payload.transcript;
+        } else if (payload.type === "response.output_text.delta" && payload.delta) {
+          realtimeAssistantPlainText.current += payload.delta;
+        } else if (payload.type === "response.created") {
+          setSpeaking(true);
+        } else if (payload.type === "input_audio_buffer.speech_started") {
+          setSpeaking(false);
+        } else if (payload.type === "response.done") {
+          setSpeaking(false);
+          const assistantText = (realtimeAssistantAudioText.current || realtimeAssistantPlainText.current).trim();
+          if (assistantText) setMessages(current => [...current, { role: "assistant", text: assistantText }]);
+          realtimeAssistantAudioText.current = "";
+          realtimeAssistantPlainText.current = "";
+        } else if (payload.type === "error") {
+          setNotice(payload.error?.message || "Realtime voice reported an error. Try reconnecting.");
+        }
+      };
+
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      await new Promise<void>(resolve => {
+        if (peer.iceGatheringState === "complete") return resolve();
+        const onGathering = () => {
+          if (peer.iceGatheringState === "complete") {
+            peer.removeEventListener("icegatheringstatechange", onGathering);
+            resolve();
+          }
+        };
+        peer.addEventListener("icegatheringstatechange", onGathering);
+        setTimeout(() => {
+          peer.removeEventListener("icegatheringstatechange", onGathering);
+          resolve();
+        }, 1800);
+      });
+      if (!voiceConversationEnabled.current) {
+        stopRealtimeVoice();
+        return;
+      }
+      const response = await fetch("/api/voice/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: peer.localDescription?.sdp || offer.sdp
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(errorData.error || "Realtime voice session could not start.");
+      }
+      const answer = await response.text();
+      await peer.setRemoteDescription({ type: "answer", sdp: answer });
+      if (!voiceConversationEnabled.current) stopRealtimeVoice();
+    } catch (error) {
+      stopRealtimeVoice();
+      if (!voiceConversationEnabled.current) return;
+      beginVoiceCapture("Realtime voice unavailable: " + (error instanceof Error ? error.message : "connection failed") + ". Using browser voice; responses may be slower.");
+    }
+  }
+
+  async function startVoice() {
+    if (typeof window === "undefined") return;
+    if (voiceConversationEnabled.current) {
+      voiceConversationEnabled.current = false;
+      voiceReplyEnabled.current = false;
+      if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
+      recognition.current?.stop();
+      window.speechSynthesis?.cancel();
+      stopRealtimeVoice();
+      setListening(false);
+      setSpeaking(false);
+      setNotice("Voice conversation ended.");
+      return;
+    }
+    voiceConversationEnabled.current = true;
+    voiceReplyEnabled.current = true;
+    window.speechSynthesis?.cancel();
+    try {
+      const response = await fetch("/api/voice/session", { cache: "no-store" });
+      const capability = await response.json() as { enabled?: boolean; reason?: string };
+      if (!voiceConversationEnabled.current) return;
+      if (capability.enabled) {
+        await startRealtimeVoice();
+        return;
+      }
+      if (voiceConversationEnabled.current) {
+        beginVoiceCapture((capability.reason || "Realtime voice is not enabled.") + " Using browser voice; responses may be slower.");
+      }
+      return;
+    } catch {
+      // The browser voice path remains available if the realtime capability check fails.
+    }
+    if (voiceConversationEnabled.current) beginVoiceCapture("Could not check realtime voice availability. Using browser voice; responses may be slower.");
   }
 
   function navigate(label: string) {
@@ -1051,8 +1297,8 @@ export default function SonusWorkspace() {
               <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}{assistantBusy && <div className="ws-message assistant"><span className="ws-message-avatar"><AudioLines size={14} /></span><p>Thinking through your request…</p></div>}</div>
               {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? (savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) ? "Saved contact address · not identity-verified" : "Address format only · not verified") : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) && <button type="button" className="ws-recipient-save" onClick={() => { setContactAddressInput(intent.recipient); setContactNameInput(""); document.getElementById("ws-contact-name-field")?.focus(); setNotice("Add a recognizable name for this address in Saved recipients. Verify the address independently before saving."); }}> <Plus size={11} /> Save to address book</button>}{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This is a draft until you choose “Send test payment” and approve the exact transaction in your wallet. Names are not resolved. Sending is restricted to native USDC on Arc Testnet."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }} disabled={balanceBusy || paymentTx?.status === "submitted" || paymentTx?.status === "pending"}>{paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction pending" : balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button>{intent.feeEstimate && EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && intent.asset === "USDC" && paymentTx?.status !== "submitted" && paymentTx?.status !== "pending" && paymentTx?.status !== "confirmed" && <button className="ws-send-payment-btn" onClick={() => void sendArcTestnetPayment()} disabled={balanceBusy}>{balanceBusy ? "Working…" : "Send test payment"} <ArrowUpRight size={13} /></button>}</div></div>}
               {paymentTx && <div className={"ws-payment-result " + paymentTx.status} role="status" aria-live="polite"><div><span className="ws-eyebrow">ON-CHAIN TRANSACTION</span><strong>{paymentTx.status === "confirmed" ? "Payment confirmed" : paymentTx.status === "failed" ? "Transaction failed" : paymentTx.status === "pending" ? "Confirmation pending" : "Transaction submitted"}</strong><small>{paymentTx.detail}</small><a href={"https://testnet.arcscan.app/tx/" + paymentTx.hash} target="_blank" rel="noreferrer">View transaction on Arcscan <ExternalLink size={12} /></a></div><button onClick={() => navigator.clipboard.writeText(paymentTx.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(paymentTx.hash))} aria-label="Copy transaction hash"><Copy size={15} /></button></div>}<div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
-              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : speaking ? "ws-mic-btn speaking" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : speaking ? "Interrupt spoken reply and use voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
-              <div className="ws-assistant-foot" role="status" aria-live="polite" aria-atomic="true"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : speaking ? "Speaking response… tap the mic to interrupt." : "Voice uses browser speech recognition and spoken replies."}</span></div>
+              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={voiceConversationEnabled.current || speaking ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={voiceConversationEnabled.current ? "End voice conversation" : "Start voice conversation"} title={speaking ? "Speaking. Tap to end voice mode." : listening ? "Listening. Tap to end voice mode." : "Start hands-free voice conversation"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
+              <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{speaking ? "Sonus is speaking…" : realtimeMode.current ? "Realtime voice connected." : listening ? "Listening (browser voice)…" : "Voice uses your browser’s speech recognition."}</span></div>
             </section>
             <footer className="ws-footer"><span>SONUS / PRIVATE WORKSPACE</span><span>BUILT FOR CLARITY. DESIGNED FOR CONTROL.</span><button onClick={() => setNotice("Dashboard prices and portfolio examples are illustrative. Native USDC transfers are connected on Arc Testnet only; swaps, bridges, and other networks are not live.")}>What’s live? <ExternalLink size={12} /></button></footer>
           </> : active === "Portfolio" ? <section className="ws-portfolio-page">
