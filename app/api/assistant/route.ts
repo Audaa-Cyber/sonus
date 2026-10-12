@@ -109,6 +109,9 @@ function localFallback(message: string): AssistantOutput {
 function bindIntentToUserText(output: AssistantOutput, userText: string): AssistantOutput {
   if (output.intent.action !== "transfer") return output;
   const context = userText.toLowerCase();
+  if (/\b(?:should i|would you|is it safe|what if|how do i|can i|could i|do you think|is it okay to)\b/i.test(userText)) {
+    return { ...output, intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
+  }
   if (!/\b(send|pay|transfer)\b/i.test(userText)) {
     return { ...output, intent: { ...output.intent, action: "unknown", amount: null, asset: null, recipient: null, needsClarification: true, clarificationQuestion: "Are you asking to prepare a transfer, or just discussing one?" } };
   }
