@@ -27,6 +27,16 @@ test("imports CSV with quoted names and commas", () => {
   assert.equal(result.rejected, 0);
 });
 
+test("supports escaped double quotes inside quoted CSV fields", () => {
+  const result = parseContactImport(
+    'name,address\n"Alex ""Ace"" Smith",0x6666666666666666666666666666666666666666',
+    "contacts.csv"
+  );
+  assert.deepEqual(result.contacts, [
+    { name: 'Alex "Ace" Smith', address: "0x6666666666666666666666666666666666666666" }
+  ]);
+});
+
 test("rejects files without the required columns", () => {
   assert.throws(() => parseContactImport("nickname,chain\nAlex,ethereum", "contacts.csv"), /name and address columns/);
 });
