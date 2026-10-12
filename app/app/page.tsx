@@ -2,6 +2,7 @@
 
 import "./workspace.css";
 import { parseContactImport } from "@/lib/contact-import.mjs";
+import { normalizeSavedContacts } from "@/lib/contact-storage.mjs";
 import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
 import { normalizeTransactionHistory } from "@/lib/transaction-history.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -259,7 +260,7 @@ export default function SonusWorkspace() {
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setSavedContacts(parsed.filter((item): item is SavedContact => Boolean(item) && typeof item.id === "string" && typeof item.name === "string" && EVM_ADDRESS_RE.test(String(item.address)) && typeof item.createdAt === "number").slice(0, 200));
+          setSavedContacts(normalizeSavedContacts(parsed) as SavedContact[]);
         }
       }
     } catch {
