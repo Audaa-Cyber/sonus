@@ -76,3 +76,11 @@
 @media(max-width:420px){.ws-intelligence-market-header{align-items:flex-start;flex-direction:column}.ws-intelligence-market-header button{width:100%}}
 
 .ws-contact-import-row{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:-3px 0 13px}.ws-contact-import-row button{display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--ws-line);border-radius:6px;background:#fff;color:var(--ws-ink);font-size:10px}.ws-contact-import-row button:disabled{opacity:.5;cursor:not-allowed}.ws-contact-import-row span{color:var(--ws-muted);font-size:9px}.ws-contact-form>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 11px;border:0;border-radius:6px;background:var(--ws-blue);color:#fff;font-size:10px}
+
+
+/* Voice feedback: make listening and spoken playback distinct at a glance. */
+.ws-composer .ws-mic-btn.listening{color:#fff;background:#b54747;border-color:#b54747;box-shadow:0 0 0 3px rgba(181,71,71,.13);animation:ws-voice-pulse 1.4s ease-in-out infinite}
+.ws-composer .ws-mic-btn.speaking{color:var(--ws-blue);border-color:var(--ws-blue);background:#f2f5ff}
+@keyframes ws-voice-pulse{0%,100%{box-shadow:0 0 0 2px rgba(181,71,71,.12)}50%{box-shadow:0 0 0 6px rgba(181,71,71,.04)}}
+@media(max-width:700px){.ws-composer{gap:7px;padding:10px}.ws-composer input{font-size:16px;min-width:0}.ws-composer-hint{display:none}.ws-assistant-foot{gap:5px;flex-wrap:wrap;line-height:1.5}}
+@media(prefers-reduced-motion:reduce){.ws-composer .ws-mic-btn.listening{animation:none}}
