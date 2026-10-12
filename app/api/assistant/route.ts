@@ -182,7 +182,7 @@ export async function POST(request: Request) {
   if (contentLength > 20_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
   if (isRateLimited(request)) return NextResponse.json({ error: "Too many assistant requests. Wait a minute and try again." }, { status: 429 });
   const rawBody = await readLimitedBody(request, 20_000);
-  if (!rawBody.ok) return NextResponse.json({ error: rawBody.error }, { status: rawBody.status });
+  if (rawBody.ok === false) return NextResponse.json({ error: rawBody.error }, { status: rawBody.status });
   let body: unknown;
   try {
     body = JSON.parse(rawBody.text);
