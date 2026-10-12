@@ -52,7 +52,11 @@ const starters = [
 
 function buildReply(input: string): { reply: string; intent?: Intent } {
   const text = input.trim();
-  const send = /\b(send|pay|transfer)\b/i.test(text);
+  const isHypothetical = /\b(?:should i|would you|is it safe|what if|how do i|can i|could i|do you think|is it okay to)\b/i.test(text);
+  const send = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
+  if (isHypothetical && /\b(send|pay|transfer)\b/i.test(text)) {
+    return { reply: "I can help you assess the risks, but I will not turn a question or hypothetical into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset." };
+  }
   if (send) {
     const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|usd)?/i);
     const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
@@ -775,6 +779,7 @@ export default function SonusWorkspace() {
     if (!clean || assistantBusy) return;
     setInput("");
     setActive("Overview");
+    setIntent(null);
     setAssistantBusy(true);
     setMessages(current => [...current, { role: "user", text: clean }]);
 
