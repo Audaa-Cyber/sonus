@@ -2,6 +2,7 @@
 
 import "./workspace.css";
 import { parseContactImport } from "@/lib/contact-import.mjs";
+import { isHypotheticalPaymentQuestion } from "@/lib/payment-intent.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -52,9 +53,9 @@ const starters = [
 
 function buildReply(input: string): { reply: string; intent?: Intent } {
   const text = input.trim();
-  const isHypothetical = /\b(?:should i|would you|is it safe|what if|how do i|can i|could i|do you think|is it okay to)\b/i.test(text);
+  const isHypothetical = isHypotheticalPaymentQuestion(text);
   const send = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
-  if (isHypothetical && /\b(send|pay|transfer)\b/i.test(text)) {
+  if (isHypothetical) {
     return { reply: "I can help you assess the risks, but I will not turn a question or hypothetical into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset." };
   }
   if (send) {
