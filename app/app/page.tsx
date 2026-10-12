@@ -3,7 +3,6 @@
 import "./workspace.css";
 import { parseContactImport } from "@/lib/contact-import.mjs";
 import { normalizeSavedContacts } from "@/lib/contact-storage.mjs";
-import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
 import { normalizeTransactionHistory } from "@/lib/transaction-history.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -53,33 +52,6 @@ const starters = [
   { icon: ShieldCheck, label: "Check a wallet", prompt: "What should I check before sending crypto to a new address?" },
 ];
 
-function buildReply(input: string): { reply: string; intent?: Intent } {
-  const text = input.trim();
-  const isHypothetical = isNonActionablePaymentText(text);
-  const send = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
-  if (isHypothetical) {
-    return { reply: "I can help you assess the risks, but I will not turn advisory, hypothetical, or negative wording into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset." };
-  }
-  if (send) {
-    const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|usd)?/i);
-    const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
-    const asset = (amountMatch?.[2] || "USDC").toUpperCase();
-    const amount = amountMatch?.[1] ? (amountMatch[1].startsWith(".") ? "0" + amountMatch[1] : amountMatch[1]) : "";
-    const recipient = recipientMatch?.[1] || "";
-    if (!amount || !recipient || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !SUPPORTED_DRAFT_ASSETS.has(asset)) {
-      return { reply: "I can help prepare that, but I need a valid positive amount, a supported token (USDC, USDT, ETH, or SOL), and a recipient. For example: “Send 25 USDC to Alex for lunch.”" };
-    }
-    const reasonMatch = text.match(/\bfor\s+(.+)$/i);
-    return {
-      reply: EVM_ADDRESS_RE.test(recipient) ? "I’ve drafted the transfer. The address format looks like an EVM address, but Sonus has not verified ownership, token support, or the destination network." : "I’ve drafted the transfer, but this recipient is only a name or handle. Sonus has not resolved it to a wallet address, so do not treat the recipient as verified.",
-      intent: { recipient, amount, asset, network: "Choose network", reason: reasonMatch?.[1] || "Not specified" }
-    };
-  }
-  if (/swap|exchange|trade/i.test(text)) return { reply: "I can help plan a swap. Choose the token you’re spending, the token you want, and your preferred network. Live quotes and execution are not connected in this preview." };
-  if (/market|price|trend|overview/i.test(text)) return { reply: "I couldn't retrieve verified live market data from the assistant service just now. The market panel may still load separately; please retry before relying on current prices." };
-  if (/wallet|address|safe|risk|scam/i.test(text)) return { reply: "Before sending: verify the address through a trusted channel, check the network and asset, review the amount and fees, and start with a small test transfer if appropriate. Never share your recovery phrase." };
-  return { reply: "I can help you plan a transfer, think through a swap, review wallet safety, or explain a market concept. For any transaction, I’ll show the details for review first." };
-}
 
 export default function SonusWorkspace() {
   const [active, setActive] = useState("Overview");
