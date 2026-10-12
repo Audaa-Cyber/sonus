@@ -68,7 +68,11 @@ async function getLiveMarketSummary(): Promise<string | null> {
 
 function localFallback(message: string): AssistantOutput {
   const text = message.trim();
-  const isTransfer = /\b(send|pay|transfer)\b/i.test(text);
+  const isHypothetical = /\b(?:should i|would you|is it safe|what if|how do i|can i|could i|do you think|is it okay to)\b/i.test(text);
+  const isTransfer = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
+  if (isHypothetical && /\b(send|pay|transfer)\b/i.test(text)) {
+    return { reply: "I can help you assess the risks, but I will not turn a question or hypothetical into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset.", intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
+  }
   if (isTransfer) {
     const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|btc|usd)?/i);
     const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
