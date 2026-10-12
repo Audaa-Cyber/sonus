@@ -671,6 +671,28 @@ export default function SonusWorkspace() {
     setNotice("Saved “" + name + "” in this browser only. The address is not identity-verified.");
   }
 
+  function exportContacts() {
+    if (!savedContacts.length) {
+      setNotice("There are no saved contacts to export yet.");
+      return;
+    }
+    const backup = {
+      format: "sonus-contacts-v1",
+      exportedAt: new Date().toISOString(),
+      contacts: savedContacts.map(({ name, address }) => ({ name, address }))
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "sonus-contacts-backup.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice("Exported a local JSON backup. Keep it private because it contains recipient addresses.");
+  }
+
   async function importContacts(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -947,7 +969,7 @@ export default function SonusWorkspace() {
             <section className="ws-contacts-panel" aria-labelledby="ws-contacts-title">
               <div className="ws-section-heading"><div><h2 id="ws-contacts-title">Saved recipients</h2><p>Resolve names you have explicitly saved on this browser</p></div><span className="ws-contact-count">{savedContacts.length} / 200</span></div>
               <input ref={contactImportRef} type="file" accept=".csv,.json,application/json,text/csv" onChange={importContacts} hidden />
-              <div className="ws-contact-import-row"><button type="button" disabled={contactImportBusy || savedContacts.length >= 200} onClick={() => contactImportRef.current?.click()}><FileUp size={14} /> {contactImportBusy ? "Importing…" : "Import contacts"}</button><span>CSV or JSON export · validated locally</span></div>
+              <div className="ws-contact-import-row"><button type="button" disabled={contactImportBusy || savedContacts.length >= 200} onClick={() => contactImportRef.current?.click()}><FileUp size={14} /> {contactImportBusy ? "Importing…" : "Import contacts"}</button><button type="button" disabled={!savedContacts.length} onClick={exportContacts}><Download size={14} /> Export backup</button><span>CSV or JSON · processed locally</span></div>
               <form className="ws-contact-form" onSubmit={saveContact}>
                 <label><span>CONTACT NAME</span><input id="ws-contact-name-field" value={contactNameInput} onChange={event => setContactNameInput(event.target.value)} maxLength={50} placeholder="e.g. Alex" autoComplete="off" required /></label>
                 <label><span>EVM WALLET ADDRESS</span><input value={contactAddressInput} onChange={event => setContactAddressInput(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} required /></label>
