@@ -579,13 +579,14 @@ export default function SonusWorkspace() {
     });
   }
 
-  async function sendArcTestnetPayment() {
-    if (!intent) return;
+  async function sendArcTestnetPayment(intentOverride?: Intent | null) {
+    const paymentIntent = intentOverride || intentRef.current || intent;
+    if (!paymentIntent) return;
     const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before sending."); return; }
-    if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
-    if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
-    const match = intent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
+    if (paymentIntent.network !== "Arc Testnet" || paymentIntent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
+    if (!EVM_ADDRESS_RE.test(paymentIntent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
+    const match = paymentIntent.amount.match(/^(\d+)(?:\.(\d{1,6}))?$/);
     if (!match) { setNotice("Enter a positive USDC amount with up to 6 decimal places."); return; }
     const amountUnits6 = BigInt(match[1]) * 1000000n + BigInt((match[2] || "").padEnd(6, "0") || "0");
     if (amountUnits6 <= 0n) { setNotice("Enter an amount greater than zero."); return; }
@@ -598,7 +599,12 @@ export default function SonusWorkspace() {
     setNotice("Rechecking network, recipient, balance, and fees before wallet approval.");
     try {
       const chain = await provider.request({ method: "eth_chainId" }) as string;
-      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Wrong network. Switch to Arc Testnet before sending."); return; }
+      if (Number.parseInt(chain, 16) !== ARC_TESTNET_CHAIN_ID) {
+        try { await switchChainAsync({ chainId: ARC_TESTNET_CHAIN_ID }); }
+        catch { setNotice("Please switch your wallet to Arc Testnet to continue. Nothing was sent."); return; }
+        const switchedChain = await provider.request({ method: "eth_chainId" }) as string;
+        if (Number.parseInt(switchedChain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Your wallet is not on Arc Testnet yet. Nothing was sent."); return; }
+      }
       const accounts = await provider.request({ method: "eth_accounts" }) as string[];
       const from = accounts?.[0];
       if (!from || from.toLowerCase() !== walletAddress.toLowerCase()) { setNotice("The active wallet account changed. Reconnect before sending."); return; }
@@ -606,7 +612,7 @@ export default function SonusWorkspace() {
       if (!spendingRulesReady) { setNotice("Payment rules are still loading. No transaction was sent; try again."); return; }
       if (spendingRulesStorageError) { setNotice("Payment rules could not be read or saved. No transaction was sent; check browser storage and save the rules again."); return; }
       if (spendingRules.requireSavedRecipient) {
-        if (!contactsReady || !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase())) {
+        if (!contactsReady || !savedContacts.some(contact => contact.address.toLowerCase() === paymentIntent.recipient.toLowerCase())) {
           setNotice("Recipient rule blocked this payment: this recipient is not in your saved contacts. Save and verify the exact address in Contacts, or disable the saved-recipient rule in Settings.");
           return;
         }
@@ -618,9 +624,9 @@ export default function SonusWorkspace() {
           setNotice("Your spending rules are invalid. Update them in Settings before sending.");
           return;
         }
-        const requested = Number(intent.amount);
+        const requested = Number(paymentIntent.amount);
         if (requested > maxSingle) {
-          setNotice("Spending rule blocked this payment: " + intent.amount + " USDC exceeds your per-payment limit of " + spendingRules.maxSingleUsdc + " USDC. Change the limit in Settings if you intend to allow it.");
+          setNotice("Spending rule blocked this payment: " + paymentIntent.amount + " USDC exceeds your per-payment limit of " + spendingRules.maxSingleUsdc + " USDC. Change the limit in Settings if you intend to allow it.");
           return;
         }
         const utcDayStart = new Date();
@@ -636,7 +642,7 @@ export default function SonusWorkspace() {
       const preflightResponse = await fetch("/api/risk/preflight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: from, recipient: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, chainId: Number.parseInt(chain, 16) }),
+        body: JSON.stringify({ sender: from, recipient: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, chainId: Number.parseInt(chain, 16) }),
         cache: "no-store",
       });
       if (!preflightResponse.ok) { setNotice("Transaction preflight is unavailable. No transaction was sent; try again later."); return; }
@@ -647,33 +653,19 @@ export default function SonusWorkspace() {
         return;
       }
       const warnings = (preflight.checks || []).filter(check => check.severity === "warning").map(check => check.message);
-      if (from.toLowerCase() === intent.recipient.toLowerCase()) { setNotice("Recipient and sender are the same wallet. Check the address before proceeding."); return; }
-      const gasHex = await provider.request({ method: "eth_estimateGas", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16) }, "latest"] }) as string;
-      const gasLimit = (BigInt(gasHex) * 120n + 99n) / 100n;
-      const priceHex = await provider.request({ method: "eth_gasPrice" }) as string;
-      const feeWei = gasLimit * BigInt(priceHex);
+      if (from.toLowerCase() === paymentIntent.recipient.toLowerCase()) { setNotice("Recipient and sender are the same wallet. Check the address before proceeding."); return; }
       const balanceHex = await provider.request({ method: "eth_getBalance", params: [from, "latest"] }) as string;
-      if (BigInt(balanceHex) < value + feeWei) {
-        setNotice("Insufficient native USDC for the amount plus estimated fee. No transaction was sent.");
-        return;
-      }
-      const feeWhole = feeWei / 1000000000000000000n;
-      const feeFraction = (feeWei % 1000000000000000000n) / 1000000000000n;
-      const fee = (Number(feeWhole) + Number(feeFraction) / 1000000).toLocaleString(undefined, { maximumFractionDigits: 6 });
-      const amountLabel = intent.amount + " USDC";
-      const warningText = warnings.length ? "\n\nPreflight warnings:\n• " + warnings.join("\n• ") : "";
+      if (BigInt(balanceHex) < value) { setNotice("Your wallet balance may not cover this amount. Nothing was sent."); return; }
       const policyLines = [spendingRules.enabled ? "Per-payment limit: " + spendingRules.maxSingleUsdc + " USDC; daily cap: " + spendingRules.dailyCapUsdc + " USDC" : "Amount limits: off", spendingRules.enabled ? "Recorded today before this payment: " + spendingUsedToday.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC" : "", spendingRules.requireSavedRecipient ? "Saved-recipient rule: exact address matched" : "Saved-recipient rule: off"].filter(Boolean);
-      const policyText = "\n\nSonus local policy:\n• " + policyLines.join("\n• ");
-      const confirmed = window.confirm("Review Arc Testnet payment\n\nFrom: " + from + "\nTo: " + intent.recipient + "\nAmount: " + amountLabel + "\nEstimated network fee: " + fee + " USDC" + policyText + warningText + "\n\nBasic parameter checks only; no phishing scanner or transaction simulation is connected. This will open your wallet for final approval. Only approve if these details are correct.");
-      if (!confirmed) { setNotice("Payment cancelled before opening the wallet. Nothing was sent."); return; }
       const finalChain = await provider.request({ method: "eth_chainId" }) as string;
-      if (Number.parseInt(finalChain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Network changed during review. No transaction was sent; review the payment again on Arc Testnet."); return; }
+      if (Number.parseInt(finalChain, 16) !== ARC_TESTNET_CHAIN_ID) { setNotice("Network changed. Please keep your wallet on Arc Testnet and try again."); return; }
       const finalAccounts = await provider.request({ method: "eth_accounts" }) as string[];
-      if (!finalAccounts?.[0] || finalAccounts[0].toLowerCase() !== from.toLowerCase()) { setNotice("Wallet account changed during review. No transaction was sent; reconnect and review again."); return; }
-      const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: intent.recipient, value: "0x" + value.toString(16), gas: "0x" + gasLimit.toString(16) }] }) as string;
+      if (!finalAccounts?.[0] || finalAccounts[0].toLowerCase() !== from.toLowerCase()) { setNotice("Your active wallet account changed. Reconnect and try again."); return; }
+      setNotice("Your wallet is opening. Review the recipient, amount, and fee there; approve only if correct.");
+      const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from, to: paymentIntent.recipient, value: "0x" + value.toString(16) }] }) as string;
       if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) throw new Error("Wallet returned an invalid transaction hash.");
       submittedHash = hash;
-      recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "submitted", detail: "Submitted to Arc Testnet. Waiting for a transaction receipt.", policySummary: policyLines.join("; ") });
+      recordTransaction({ hash, from, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: "submitted", detail: "Submitted to Arc Testnet. Waiting for a transaction receipt.", policySummary: policyLines.join("; ") });
       setPaymentTx({ hash, status: "submitted", detail: "Submitted to your wallet. Waiting for Arc Testnet confirmation." });
       setNotice("Transaction submitted. Your wallet approved it; waiting for on-chain status.");
       for (let attempt = 0; attempt < 25; attempt++) {
@@ -683,19 +675,19 @@ export default function SonusWorkspace() {
           const success = receipt.status === "0x1";
           const blockNumber = receipt.blockNumber ? BigInt(receipt.blockNumber).toString() : undefined;
           const detail = success ? "Confirmed in block " + (blockNumber || "unknown") + "." : "The network reported a failed transaction.";
-          recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: success ? "confirmed" : "failed", detail, ...(blockNumber ? { blockNumber } : {}) });
+          recordTransaction({ hash, from, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: success ? "confirmed" : "failed", detail, ...(blockNumber ? { blockNumber } : {}) });
           setPaymentTx({ hash, status: success ? "confirmed" : "failed", detail });
           setNotice(success ? "Arc Testnet payment confirmed." : "Transaction was mined but failed. Check the explorer for details.");
           if (success) { setIntent(null); void refreshWalletBalances(); }
           return;
         }
       }
-      recordTransaction({ hash, from, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "pending", detail: "No receipt was found during the initial polling window. Check Arcscan before retrying." });
+      recordTransaction({ hash, from, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: "pending", detail: "No receipt was found during the initial polling window. Check Arcscan before retrying." });
       setPaymentTx({ hash, status: "pending", detail: "Still pending. You can check the transaction on Arcscan." });
       setNotice("Transaction is still pending. Do not resend until you check its status.");
     } catch (error) {
       if (submittedHash && transactionSender) {
-        recordTransaction({ hash: submittedHash, from: transactionSender, to: intent.recipient, amount: intent.amount, asset: intent.asset, network: intent.network, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
+        recordTransaction({ hash: submittedHash, from: transactionSender, to: paymentIntent.recipient, amount: paymentIntent.amount, asset: paymentIntent.asset, network: paymentIntent.network, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
         setPaymentTx({ hash: submittedHash, status: "pending", detail: "Status polling was interrupted. Check Arcscan before retrying." });
       }
       setNotice("Payment was not confirmed as submitted: " + (error instanceof Error ? error.message : "wallet request failed") + ". Check your wallet and transaction history before retrying.");
