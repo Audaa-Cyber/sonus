@@ -93,7 +93,7 @@ Manual cases to verify locally:
 
 ## Saved recipient address book
 
-The Overview workspace includes a small address book for EVM addresses. Contacts are stored in the current browser's `localStorage` under `sonus:contacts:v1`; they are not sent to Sonus servers or synced across devices. Payment requests can use an exact saved contact name, which is mapped locally to its stored address before the draft is shown. This is convenience-based name resolution only: it does not verify a person's identity or prove they control the address. Always confirm the full destination address before wallet approval. Do not use this local storage as a secure or shared contact database.
+The Overview workspace includes a small address book for EVM addresses. Contacts are stored in the current browser's `localStorage` under `sonus:contacts:v1` and are not synced across devices. Payment requests can use an exact saved contact name, which is mapped locally to its stored address before the draft is shown. Only contact names (not saved wallet addresses) are sent as assistant context so Sonus can understand the request. This is convenience-based name resolution only: it does not verify a person's identity or prove they control the address. Always confirm the destination in the wallet before approval. Do not use this local storage as a secure or shared contact database.
 
 ## Live market data
 
