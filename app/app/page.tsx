@@ -19,7 +19,7 @@ import {
 
 type Message = { role: "assistant" | "user"; text: string };
 type SavedContact = { id: string; name: string; address: string; createdAt: number };
-type Intent = { recipient: string; amount: string; asset: string; network: string; reason: string; feeEstimate?: string };
+type Intent = { recipient: string; recipientLabel?: string; amount: string; asset: string; network: string; reason: string };
 type WalletBalances = { native: string | null; status: string; updatedAt: number | null };
 type PaymentTx = { hash: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string };
 type StoredTransaction = { hash: string; from: string; to: string; amount: string; asset: string; network: string; status: "submitted" | "confirmed" | "failed" | "pending"; detail: string; createdAt: number; updatedAt: number; blockNumber?: string; note?: string; policySummary?: string };
@@ -91,6 +91,7 @@ export default function SonusWorkspace() {
   ]);
   const messagesRef = useRef<Message[]>(messages);
   const [intent, setIntent] = useState<Intent | null>(null);
+  const intentRef = useRef<Intent | null>(intent);
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [contactsReady, setContactsReady] = useState(false);
   const [contactNameInput, setContactNameInput] = useState("");
@@ -151,6 +152,10 @@ export default function SonusWorkspace() {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    intentRef.current = intent;
+  }, [intent]);
 
   useEffect(() => {
     return () => {
@@ -818,7 +823,8 @@ export default function SonusWorkspace() {
     }
     window.speechSynthesis.cancel();
     if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
-    const utterance = new SpeechSynthesisUtterance(text.replace(/\n+/g, ". "));
+    const spokenText = text.replace(/0x[a-fA-F0-9]{40}/g, address => savedContacts.find(contact => contact.address.toLowerCase() === address.toLowerCase())?.name || "the recipient address");
+    const utterance = new SpeechSynthesisUtterance(spokenText.replace(/\n+/g, ". "));
     utterance.lang = "en-US";
     utterance.rate = 1.04;
     utterance.pitch = 1;
@@ -841,7 +847,17 @@ export default function SonusWorkspace() {
 
   async function submitMessage(value = input) {
     const clean = value.trim();
-    if (!clean || assistantBusy) return;
+    if (!clean) return;
+    const approvalPhrase = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(clean);
+    const pendingIntent = intentRef.current;
+    if (pendingIntent && approvalPhrase) {
+      setInput("");
+      setMessages(current => [...current, { role: "user", text: clean }]);
+      appendAssistantReply("Opening your wallet now. Check the payment details and approve it there if everything looks right.");
+      void sendArcTestnetPayment(pendingIntent);
+      return;
+    }
+    if (assistantBusy) return;
     setInput("");
     setActive("Overview");
     setIntent(null);
@@ -880,11 +896,11 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ message: clean, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name, address }) => ({ name, address })) })
       });
       const data = await response.json() as {
         reply?: string;
-        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; recipientLabel?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
         mode?: "ai" | "fallback";
         error?: string;
       };
@@ -896,21 +912,21 @@ export default function SonusWorkspace() {
         if (resolvedRecipient !== parsed.recipient) setNotice("Resolved the name using your local saved contact. This does not verify who controls the address.");
         setIntent({
           recipient: resolvedRecipient,
+          recipientLabel: parsed.recipientLabel || savedContacts.find(contact => contact.address.toLowerCase() === resolvedRecipient.toLowerCase())?.name,
           amount: parsed.amount,
-          asset: parsed.asset.toUpperCase(),
-          network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
+          asset: "USDC",
+          network: "Arc Testnet",
           reason: parsed.purpose || "Not specified"
         });
         setPaymentTx(null);
       } else if (parsed?.action === "transfer" && (parsed.amount || parsed.recipient)) {
         setNotice(parsed.clarificationQuestion || "Sonus identified a possible transfer, but the draft is incomplete. Provide a valid amount, asset, recipient, and network.");
       }
-      if (data.mode === "fallback") setNotice("AI mode is not configured yet. Sonus used its local assistant fallback; responses are limited.");
+      if (data.mode === "fallback") setNotice("Sonus is running in limited mode because its AI connection is not configured. Add a valid AI provider key to enable natural conversation.");
     } catch (error) {
-      const result = buildReply(clean);
-      appendAssistantReply(result.reply + "\n\nThe AI service is unavailable right now, so this response came from the local fallback.");
-      if (result.intent) { setIntent({ ...result.intent, recipient: resolveSavedRecipient(result.intent.recipient) }); setPaymentTx(null); }
-      setNotice("Assistant API unavailable: " + (error instanceof Error ? error.message : "request failed"));
+      console.error("Sonus assistant request failed", error);
+      appendAssistantReply("Sorry, I couldn’t reach my assistant service just now. Please try again in a moment.");
+      setNotice("Sonus couldn’t connect to its AI service. Check the provider key, model, and API URL in your server settings.");
     } finally {
       setAssistantBusy(false);
     }
@@ -961,7 +977,7 @@ export default function SonusWorkspace() {
           setListening(false);
           try { engine.stop(); } catch { /* recognition may already have ended */ }
           submitMessage(submitted);
-        }, 650);
+        }, 1500);
       }
     };
     engine.onerror = (event: { error?: string }) => {
@@ -1013,7 +1029,7 @@ export default function SonusWorkspace() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+        body: JSON.stringify({ message: transcript, history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })), contacts: savedContacts.map(({ name, address }) => ({ name, address })) })
       });
       const data = await response.json() as {
         intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
@@ -1026,9 +1042,10 @@ export default function SonusWorkspace() {
         const resolvedRecipient = resolveSavedRecipient(parsed.recipient);
         setIntent({
           recipient: resolvedRecipient,
+          recipientLabel: parsed.recipientLabel || savedContacts.find(contact => contact.address.toLowerCase() === resolvedRecipient.toLowerCase())?.name,
           amount: parsed.amount,
-          asset: parsed.asset.toUpperCase(),
-          network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
+          asset: "USDC",
+          network: "Arc Testnet",
           reason: parsed.purpose || "Not specified"
         });
         setPaymentTx(null);
@@ -1086,7 +1103,13 @@ export default function SonusWorkspace() {
         if (payload.type === "conversation.item.input_audio_transcription.completed" && payload.transcript?.trim()) {
           const transcript = payload.transcript.trim();
           setMessages(current => [...current, { role: "user", text: transcript }]);
-          void prepareRealtimePaymentDraft(transcript);
+          const approval = /^(?:yes|yeah|yep|approved?|i approve|i confirm|confirmed|confirm|send it|go ahead|do it|proceed|looks good|correct|okay|ok)[.! ]*$/i.test(transcript);
+          if (approval && intentRef.current) {
+            setMessages(current => [...current, { role: "assistant", text: "Opening your wallet now. Check the payment details and approve it there if everything looks right." }]);
+            void sendArcTestnetPayment(intentRef.current);
+          } else {
+            void prepareRealtimePaymentDraft(transcript);
+          }
         } else if (payload.type === "response.output_audio_transcript.delta" && payload.delta) {
           realtimeAssistantAudioText.current += payload.delta;
         } else if (payload.type === "response.output_audio_transcript.done" && payload.transcript) {
@@ -1097,6 +1120,9 @@ export default function SonusWorkspace() {
           setSpeaking(true);
         } else if (payload.type === "input_audio_buffer.speech_started") {
           setSpeaking(false);
+          if (realtimeChannel.current?.readyState === "open") {
+            try { realtimeChannel.current.send(JSON.stringify({ type: "response.cancel" })); } catch { /* session may already be idle */ }
+          }
         } else if (payload.type === "response.done") {
           setSpeaking(false);
           const assistantText = (realtimeAssistantAudioText.current || realtimeAssistantPlainText.current).trim();
@@ -1130,8 +1156,8 @@ export default function SonusWorkspace() {
       }
       const response = await fetch("/api/voice/session", {
         method: "POST",
-        headers: { "Content-Type": "application/sdp" },
-        body: peer.localDescription?.sdp || offer.sdp
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sdp: peer.localDescription?.sdp || offer.sdp, contacts: savedContacts.map(({ name, address }) => ({ name, address })), history: messagesRef.current.slice(-8).map(message => ({ role: message.role, content: message.text })) })
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({})) as { error?: string };
@@ -1149,6 +1175,13 @@ export default function SonusWorkspace() {
 
   async function startVoice() {
     if (typeof window === "undefined") return;
+    if (voiceConversationEnabled.current && speaking && !realtimeMode.current) {
+      window.speechSynthesis?.cancel();
+      setSpeaking(false);
+      if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
+      beginVoiceCapture("Stopped speaking. Go ahead; I’m listening.");
+      return;
+    }
     if (voiceConversationEnabled.current) {
       voiceConversationEnabled.current = false;
       voiceReplyEnabled.current = false;
