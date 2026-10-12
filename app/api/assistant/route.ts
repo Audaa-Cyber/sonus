@@ -1,4 +1,4 @@
-import { isHypotheticalPaymentQuestion } from "@/lib/payment-intent.mjs";
+import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -69,10 +69,10 @@ async function getLiveMarketSummary(): Promise<string | null> {
 
 function localFallback(message: string): AssistantOutput {
   const text = message.trim();
-  const isHypothetical = isHypotheticalPaymentQuestion(text);
+  const isHypothetical = isNonActionablePaymentText(text);
   const isTransfer = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
   if (isHypothetical && /\b(send|pay|transfer)\b/i.test(text)) {
-    return { reply: "I can help you assess the risks, but I will not turn a question or hypothetical into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset.", intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
+    return { reply: "I can help you assess the risks, but I will not turn advisory, hypothetical, or negative wording into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset.", intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
   }
   if (isTransfer) {
     const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|btc|usd)?/i);
@@ -110,7 +110,7 @@ function localFallback(message: string): AssistantOutput {
 function bindIntentToUserText(output: AssistantOutput, userText: string): AssistantOutput {
   if (output.intent.action !== "transfer") return output;
   const context = userText.toLowerCase();
-  if (isHypotheticalPaymentQuestion(userText)) {
+  if (isNonActionablePaymentText(userText)) {
     return { ...output, intent: { action: "risk", amount: null, asset: null, recipient: null, chain: null, purpose: null, needsClarification: false, clarificationQuestion: null } };
   }
   if (!/\b(send|pay|transfer)\b/i.test(userText)) {
