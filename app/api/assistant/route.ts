@@ -25,6 +25,33 @@ const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 30;
 const requestWindows = new Map<string, { startedAt: number; count: number }>();
 
+async function readLimitedBody(request: Request, maxBytes: number): Promise<{ ok: true; text: string } | { ok: false; status: 400 | 413; error: string }> {
+  if (!request.body) return { ok: false, status: 400, error: "Request body must be valid JSON." };
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytesRead = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        await reader.cancel("Request body exceeds the allowed size.");
+        return { ok: false, status: 413, error: "Request is too large." };
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return { ok: true, text };
+  } catch {
+    return { ok: false, status: 400, error: "Request body must be valid JSON." };
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function isRateLimited(request: Request): boolean {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   const key = forwarded || request.headers.get("x-real-ip") || "local";
@@ -180,11 +207,11 @@ export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (contentLength > 20_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
   if (isRateLimited(request)) return NextResponse.json({ error: "Too many assistant requests. Wait a minute and try again." }, { status: 429 });
+  const rawBody = await readLimitedBody(request, 20_000);
+  if (!rawBody.ok) return NextResponse.json({ error: rawBody.error }, { status: rawBody.status });
   let body: unknown;
   try {
-    const rawBody = await request.text();
-    if (rawBody.length > 20_000) return NextResponse.json({ error: "Request is too large." }, { status: 413 });
-    body = JSON.parse(rawBody);
+    body = JSON.parse(rawBody.text);
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
