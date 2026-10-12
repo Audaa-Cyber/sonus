@@ -62,8 +62,15 @@ export default function SonusWorkspace() {
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
   ]);
   const messagesRef = useRef<Message[]>(messages);
-  const [intent, setIntent] = useState<Intent | null>(null);
+  const [intent, setIntentState] = useState<Intent | null>(null);
   const intentRef = useRef<Intent | null>(intent);
+  const setIntent = (next: Intent | null | ((current: Intent | null) => Intent | null)) => {
+    setIntentState(current => {
+      const updated = typeof next === "function" ? next(current) : next;
+      intentRef.current = updated;
+      return updated;
+    });
+  };
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [contactsReady, setContactsReady] = useState(false);
   const [contactNameInput, setContactNameInput] = useState("");
