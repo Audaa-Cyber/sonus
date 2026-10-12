@@ -893,7 +893,7 @@ export default function SonusWorkspace() {
   }
 
   async function prepareRealtimePaymentDraft(transcript: string) {
-    if (!/\\b(?:send|pay|transfer)\\b/i.test(transcript)) return;
+    if (!/\b(?:send|pay|transfer)\b/i.test(transcript)) return;
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
