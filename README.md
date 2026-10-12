@@ -59,7 +59,7 @@ The balance reader uses the connected wallet's RPC provider. It does not require
 - A wallet-approved native USDC transfer can be submitted on Arc Testnet after an in-page review and the wallet's own confirmation. Sonus does not receive or store private keys. This path is testnet-only.
 - Fee estimation and submission are currently limited to native USDC transfers on Arc Testnet.
 - Saved recipient names can resolve to addresses explicitly saved in the current browser. This address book is local to that browser, is not synced, and does not verify real-world identity or address ownership. Unknown names still require a wallet address.
-- The portfolio chart remains illustrative. Recent activity and the Activity page now show transaction records created by Sonus after a wallet returns a transaction hash; they are stored locally in this browser, not synced, and are not a complete wallet history/indexer. Only the Arc Testnet native-USDC send flow currently writes records.
+- The Portfolio page shows the connected wallet’s native USDC balance on Arc Testnet when refreshed, plus live market snapshots. It is not a full portfolio indexer: the chart and broader valuation remain illustrative, and tokens on other networks, NFTs, and DeFi positions are not included. Recent activity and the Activity page show transaction records created by Sonus after a wallet returns a transaction hash; they are stored locally in this browser, not synced, and are not a complete wallet history/indexer. Only the Arc Testnet native-USDC send flow currently writes records.
 - A fee estimate is a snapshot, not a guarantee. Balance checks can become stale and do not replace the wallet's final transaction review. Transaction status is polled from the connected wallet provider; if polling times out, check the explorer before retrying.
 - This is a testnet implementation. Do not treat testnet assets as real funds or use this as production payment infrastructure.
 
@@ -129,15 +129,15 @@ Official references: Arc App Kit bridge quickstart at `https://docs.arc.network/
 
 ## AI assistant API
 
-The workspace chat now calls a server-side `POST /api/assistant` route. When configured, it uses the OpenAI Responses API with a strict JSON schema so the UI receives a bounded reply and a typed intent draft. The model cannot sign transactions or call wallet methods; wallet signing remains in the browser and requires the wallet's own confirmation.
+The workspace chat calls a server-side `POST /api/assistant` route. It supports OpenAI-compatible Chat Completions providers using a configurable API root, model, and server-side key. The assistant returns a validated intent draft; it cannot sign transactions or call wallet methods. Wallet signing remains in the browser and requires the wallet's own confirmation.
 
 ### Configure locally
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `OPENAI_API_KEY` to your own key. Optionally set `OPENAI_MODEL`; the default is `gpt-4.1-mini`.
+2. Set `SONUS_AI_API_KEY`, `SONUS_AI_BASE_URL`, and `SONUS_AI_MODEL` for your provider. The base URL must be the API root, not the full `/chat/completions` endpoint. For example, OpenAI uses `https://api.openai.com/v1`; OpenRouter uses `https://openrouter.ai/api/v1`; Clean APIs uses `https://cleanapis.com/v1`. Set `SONUS_AI_MODEL` (or `OPENAI_MODEL`) to a model ID enabled in your provider account.
 3. Restart the dev server after changing environment variables.
 
-The key is read only by the server route. Do not add it to client-side code, commit `.env.local`, or paste it into chat. Without a key, the endpoint uses a clearly marked limited local fallback so the workspace still works. This fallback is not an LLM.
+The older `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` variables remain supported as fallbacks. Keep keys server-side only: never prefix them with `NEXT_PUBLIC_`, commit `.env.local`, or paste keys into chat. The configured provider must support the OpenAI-compatible Chat Completions endpoint and JSON mode. Without a key, the endpoint uses a clearly marked limited local fallback; that fallback is not an LLM.
 
 ### Current AI limits
 

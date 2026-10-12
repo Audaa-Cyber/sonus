@@ -1,0 +1,85 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { parseContactImport } from "../lib/contact-import.mjs";
+
+test("imports valid JSON contacts and rejects invalid addresses", () => {
+  const result = parseContactImport(JSON.stringify({
+    contacts: [
+      { name: "  Alex  Smith ", address: "0x1111111111111111111111111111111111111111" },
+      { name: "Bad contact", address: "not-an-address" },
+      { label: "Zero address", walletAddress: "0x0000000000000000000000000000000000000000" }
+    ]
+  }), "metamask-export.json");
+  assert.deepEqual(result.contacts, [
+    { name: "Alex Smith", address: "0x1111111111111111111111111111111111111111" }
+  ]);
+  assert.equal(result.rejected, 2);
+});
+
+test("imports CSV with quoted names and commas", () => {
+  const result = parseContactImport(
+    'name,address\n"Amy, Jr.",0x2222222222222222222222222222222222222222\n',
+    "contacts.csv"
+  );
+  assert.deepEqual(result.contacts, [
+    { name: "Amy, Jr.", address: "0x2222222222222222222222222222222222222222" }
+  ]);
+  assert.equal(result.rejected, 0);
+});
+
+test("supports escaped double quotes inside quoted CSV fields", () => {
+  const result = parseContactImport(
+    'name,address\n"Alex ""Ace"" Smith",0x6666666666666666666666666666666666666666',
+    "contacts.csv"
+  );
+  assert.deepEqual(result.contacts, [
+    { name: 'Alex "Ace" Smith', address: "0x6666666666666666666666666666666666666666" }
+  ]);
+});
+
+test("rejects files without the required columns", () => {
+  assert.throws(() => parseContactImport("nickname,chain\nAlex,ethereum", "contacts.csv"), /name and address columns/);
+});
+
+test("rejects oversized imports", () => {
+  assert.throws(() => parseContactImport("x".repeat(2_000_001), "contacts.json"), /under 2 MB/);
+});
+
+test("measures the import limit in UTF-8 bytes, not JavaScript characters", () => {
+  assert.throws(
+    () => parseContactImport("é".repeat(1_000_001), "contacts.json"),
+    /under 2 MB/
+  );
+});
+
+test("accepts a UTF-8 BOM in JSON exports", () => {
+  const result = parseContactImport(
+    '\uFEFF' + JSON.stringify([{ name: "Bela", address: "0x3333333333333333333333333333333333333333" }]),
+    "contacts.json"
+  );
+  assert.equal(result.contacts.length, 1);
+  assert.equal(result.contacts[0].name, "Bela");
+});
+
+test("accepts a UTF-8 BOM in CSV headers", () => {
+  const result = parseContactImport(
+    '\uFEFFname,address\nCora,0x4444444444444444444444444444444444444444',
+    "contacts.csv"
+  );
+  assert.equal(result.contacts.length, 1);
+  assert.equal(result.contacts[0].name, "Cora");
+});
+
+test("rejects quotes embedded in an unquoted CSV field", () => {
+  assert.throws(
+    () => parseContactImport('name,address\nAl"ex,0x5555555555555555555555555555555555555555', "contacts.csv"),
+    /quote inside an unquoted field/
+  );
+});
+
+test("rejects trailing characters after a quoted CSV field", () => {
+  assert.throws(
+    () => parseContactImport('name,address\n"Alex"x,0x5555555555555555555555555555555555555555', "contacts.csv"),
+    /characters after a closing quote/
+  );
+});

@@ -1,11 +1,18 @@
  "use client";
 
+import "./workspace.css";
+import { parseContactImport } from "@/lib/contact-import.mjs";
+import { normalizeSavedContacts } from "@/lib/contact-storage.mjs";
+import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
+import { normalizeTransactionHistory } from "@/lib/transaction-history.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { useAccount, useDisconnect, useSwitchChain } from "wagmi";
 import {
   Activity, ArrowLeftRight, ArrowRight, ArrowUpRight, AudioLines,
   Bell, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Command,
-  Copy, Download, ExternalLink, Eye, EyeOff, Globe2, History, LayoutDashboard,
+  Copy, Download, ExternalLink, Eye, EyeOff, FileUp, Globe2, History, LayoutDashboard,
   LockKeyhole, Mic, MoreHorizontal, Plus, Search, Send, Settings2,
   ShieldCheck, Sparkles, TrendingDown, TrendingUp, Wallet, X, Zap, RefreshCw
 } from "lucide-react";
@@ -22,7 +29,6 @@ type Eip1193Provider = { request: (args: { method: string; params?: unknown[] | 
 type SpeechRecognitionLike = { lang: string; interimResults: boolean; maxAlternatives: number; onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void; stop: () => void };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type SpeechWindow = Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
-declare global { interface Window { ethereum?: Eip1193Provider } }
 const ARC_TESTNET_CHAIN_ID = 5042002;
 
 const markets = [
@@ -34,6 +40,7 @@ const markets = [
 type MarketQuote = { symbol: string; name: string; priceUsd: number; change24h: number };
 type MarketApiResponse = { assets?: MarketQuote[]; source?: string; updatedAt?: string; error?: string };
 type SwapCapabilityResponse = { provider?: { name?: string }; status?: "not_ready" | "ready"; quoteAvailable?: boolean; executionAvailable?: boolean; reason?: string; supportedEnvironment?: { arcTestnet?: { supportedTokens?: string[]; caveat?: string } } };
+type RiskPreflightResponse = { status?: "blocked" | "review" | "clear"; allowedToContinue?: boolean; checks?: Array<{ code: string; severity: "block" | "warning"; message: string }>; disclaimer?: string; error?: string };
 
 function formatUsd(value: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: value >= 100 ? 2 : value >= 1 ? 4 : 6 }).format(value);
@@ -48,7 +55,11 @@ const starters = [
 
 function buildReply(input: string): { reply: string; intent?: Intent } {
   const text = input.trim();
-  const send = /\b(send|pay|transfer)\b/i.test(text);
+  const isHypothetical = isNonActionablePaymentText(text);
+  const send = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
+  if (isHypothetical) {
+    return { reply: "I can help you assess the risks, but I will not turn advisory, hypothetical, or negative wording into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset." };
+  }
   if (send) {
     const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|usd)?/i);
     const recipientMatch = text.match(/\b(?:to|for)\s+(0x[a-fA-F0-9]{40}|[a-z][a-z0-9_.-]*)/i);
@@ -72,6 +83,8 @@ function buildReply(input: string): { reply: string; intent?: Intent } {
 
 export default function SonusWorkspace() {
   const [active, setActive] = useState("Overview");
+  const [currentDateLabel, setCurrentDateLabel] = useState("");
+  const [greeting, setGreeting] = useState("Hello");
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Hey. I’m Sonus. What would you like to do with your crypto today?" }
@@ -82,11 +95,15 @@ export default function SonusWorkspace() {
   const [contactNameInput, setContactNameInput] = useState("");
   const [contactAddressInput, setContactAddressInput] = useState("");
   const [contactFormError, setContactFormError] = useState("");
+  const [contactImportBusy, setContactImportBusy] = useState(false);
+  const contactImportRef = useRef<HTMLInputElement | null>(null);
   const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [notice, setNotice] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Eip1193Provider | undefined>();
   const [walletChainId, setWalletChainId] = useState<number | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
   const [balanceBusy, setBalanceBusy] = useState(false);
@@ -108,8 +125,17 @@ export default function SonusWorkspace() {
   const [marketRefreshNonce, setMarketRefreshNonce] = useState(0);
   const [swapCapabilities, setSwapCapabilities] = useState<SwapCapabilityResponse | null>(null);
   const [swapCapabilitiesError, setSwapCapabilitiesError] = useState("");
+  const [riskRecipientInput, setRiskRecipientInput] = useState("");
+  const [riskAmountInput, setRiskAmountInput] = useState("25");
+  const [riskCheckBusy, setRiskCheckBusy] = useState(false);
+  const [riskCheckResult, setRiskCheckResult] = useState<RiskPreflightResponse | null>(null);
   const recognition = useRef<SpeechRecognitionLike | null>(null);
+  const voiceReplyPending = useRef(false);
   const paymentSubmissionLock = useRef(false);
+  const { address: connectedAddress, chainId: connectedChainId, isConnected, connector } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { switchChainAsync } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
 
   const visibleTransactions = transactionHistory.filter(item => {
     const query = historyQuery.trim().toLowerCase();
@@ -141,7 +167,7 @@ export default function SonusWorkspace() {
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setTransactionHistory(parsed.filter((item): item is StoredTransaction => Boolean(item) && typeof item.hash === "string" && /^0x[a-fA-F0-9]{64}$/.test(item.hash) && typeof item.from === "string" && EVM_ADDRESS_RE.test(item.from) && typeof item.to === "string" && EVM_ADDRESS_RE.test(item.to) && typeof item.amount === "string" && typeof item.asset === "string" && typeof item.network === "string" && ["submitted", "confirmed", "failed", "pending"].includes(item.status) && typeof item.detail === "string" && (item.note === undefined || typeof item.note === "string") && (item.policySummary === undefined || typeof item.policySummary === "string") && typeof item.createdAt === "number" && typeof item.updatedAt === "number").slice(0, 100));
+          setTransactionHistory(normalizeTransactionHistory(parsed) as StoredTransaction[]);
         }
       }
     } catch {
@@ -225,12 +251,18 @@ export default function SonusWorkspace() {
   }, [spendingRules, spendingRulesReady]);
 
   useEffect(() => {
+    const now = new Date();
+    setCurrentDateLabel(new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(now).toUpperCase());
+    setGreeting(now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening");
+  }, []);
+
+  useEffect(() => {
     try {
       const stored = window.localStorage.getItem("sonus:contacts:v1");
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setSavedContacts(parsed.filter((item): item is SavedContact => Boolean(item) && typeof item.id === "string" && typeof item.name === "string" && EVM_ADDRESS_RE.test(String(item.address)) && typeof item.createdAt === "number").slice(0, 200));
+          setSavedContacts(normalizeSavedContacts(parsed) as SavedContact[]);
         }
       }
     } catch {
@@ -266,9 +298,11 @@ export default function SonusWorkspace() {
     let requestController: AbortController | null = null;
     const loadMarket = async () => {
       requestController?.abort();
-      requestController = new AbortController();
+      const controller = new AbortController();
+      requestController = controller;
+      setMarketLoading(true);
       try {
-        const response = await fetch("/api/market", { signal: requestController.signal, cache: "no-store" });
+        const response = await fetch("/api/market", { signal: controller.signal, cache: "no-store" });
         const data = await response.json() as MarketApiResponse;
         if (!response.ok || !Array.isArray(data.assets)) throw new Error(data.error || "Market data is unavailable.");
         if (!active) return;
@@ -281,7 +315,7 @@ export default function SonusWorkspace() {
         setMarketUpdatedAt(null);
         setMarketError(error instanceof Error ? error.message : "Market data is unavailable.");
       } finally {
-        if (active) setMarketLoading(false);
+        if (active && requestController === controller) setMarketLoading(false);
       }
     };
     void loadMarket();
@@ -294,71 +328,52 @@ export default function SonusWorkspace() {
   }, [marketRefreshNonce]);
 
   useEffect(() => {
-    const provider = window.ethereum;
-    if (!provider?.on) return;
-    const handleAccounts = (...args: unknown[]) => {
-      const accounts = args[0] as string[];
-      setWalletAddress(accounts?.[0] || null);
-      setWalletBalances({ native: null, status: accounts?.[0] ? "Refresh required" : "Not connected", updatedAt: null });
-    };
-    const handleChain = (...args: unknown[]) => {
-      const value = args[0];
-      const parsed = typeof value === "string" ? Number.parseInt(value, 16) : Number(value);
-      setWalletChainId(Number.isFinite(parsed) ? parsed : null);
-      setWalletBalances({ native: null, status: "Network changed · refresh required", updatedAt: null });
-    };
-    provider.on("accountsChanged", handleAccounts);
-    provider.on("chainChanged", handleChain);
-    return () => {
-      provider.removeListener?.("accountsChanged", handleAccounts);
-      provider.removeListener?.("chainChanged", handleChain);
-    };
-  }, []);
+    let active = true;
+    setSelectedProvider(undefined);
+    if (!isConnected || !connector) return () => { active = false; };
+    void connector.getProvider()
+      .then(provider => { if (active) setSelectedProvider(provider as Eip1193Provider); })
+      .catch(() => {
+        if (active) {
+          setSelectedProvider(undefined);
+          setNotice("Could not access the selected wallet provider. Disconnect and choose the wallet again.");
+        }
+      });
+    return () => { active = false; };
+  }, [connector, isConnected]);
 
-  async function connectWallet() {
+  useEffect(() => {
+    const address = isConnected && connectedAddress ? connectedAddress : null;
+    const chain = isConnected && typeof connectedChainId === "number" ? connectedChainId : null;
+    setWalletAddress(address);
+    setWalletChainId(chain);
+    setWalletBalances({ native: null, status: address ? "Refresh required" : "Not connected", updatedAt: null });
+  }, [connectedAddress, connectedChainId, isConnected]);
+
+  function connectWallet() {
     if (walletAddress) {
       setNotice("Wallet connected: " + walletAddress + (walletChainId ? " · Chain ID " + walletChainId : "") + ". Sonus has not requested a signature or moved funds.");
       return;
     }
-    const provider = window.ethereum;
-    if (!provider) {
-      setNotice("No browser wallet was detected. Install or open a compatible EVM wallet such as MetaMask, then reload Sonus.");
+    if (!openConnectModal) {
+      setNotice("The wallet selector is unavailable. Refresh Sonus and try again.");
       return;
     }
-    setWalletBusy(true);
-    try {
-      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
-      const chain = await provider.request({ method: "eth_chainId" }) as string;
-      const parsedChain = Number.parseInt(chain, 16);
-      setWalletAddress(accounts?.[0] || null);
-      setWalletChainId(Number.isFinite(parsedChain) ? parsedChain : null);
-      setWalletBalances({ native: null, status: "Connected · balance not loaded", updatedAt: null });
-      setNotice(accounts?.[0] ? "Wallet connected. Sonus can read your public address and network. No transaction has been signed or sent." : "The wallet did not return an account.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Wallet connection was cancelled or failed.";
-      setNotice(message.toLowerCase().includes("user rejected") ? "Wallet connection cancelled. Nothing was signed." : "Could not connect wallet: " + message);
-    } finally {
-      setWalletBusy(false);
-    }
+    openConnectModal();
   }
 
-
   async function switchToArcTestnet() {
-    const provider = window.ethereum;
-    if (!provider) { setNotice("Open Sonus in a browser with an EVM wallet to switch networks."); return; }
+    if (!isConnected || !walletAddress) { setNotice("Choose and connect a wallet before switching networks."); return; }
     try {
-      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x4cef52" }] });
+      await switchChainAsync({ chainId: ARC_TESTNET_CHAIN_ID });
+      setNotice("Network switch requested for the selected wallet. Verify Arc Testnet is active before proceeding.");
     } catch (error) {
-      if ((error as { code?: number })?.code === 4902) {
-        try {
-          await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: "0x4cef52", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://rpc.testnet.arc.network"], blockExplorerUrls: ["https://testnet.arcscan.app"] }] });
-        } catch (addError) { setNotice("Could not add Arc Testnet: " + (addError instanceof Error ? addError.message : "request failed")); }
-      } else { setNotice("Network switch cancelled or failed: " + (error instanceof Error ? error.message : "request failed")); }
+      setNotice("Network switch cancelled or failed: " + (error instanceof Error ? error.message : "request failed") + ". No transaction was sent.");
     }
   }
 
   async function refreshWalletBalances() {
-    const provider = window.ethereum;
+    const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a browser wallet before reading balances."); return; }
     setBalanceBusy(true);
     setWalletBalances(current => ({ ...current, status: "Reading wallet…" }));
@@ -389,9 +404,39 @@ export default function SonusWorkspace() {
     } finally { setBalanceBusy(false); }
   }
 
+  async function runRecipientPreflight() {
+    if (!walletAddress) {
+      setNotice("Connect the wallet you intend to send from before running the payment preflight.");
+      return;
+    }
+    setRiskCheckBusy(true);
+    setRiskCheckResult(null);
+    try {
+      const response = await fetch("/api/risk/preflight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender: walletAddress,
+          recipient: riskRecipientInput.trim(),
+          amount: riskAmountInput.trim(),
+          asset: "USDC",
+          network: "Arc Testnet",
+          chainId: walletChainId ?? 0
+        })
+      });
+      const data = await response.json() as RiskPreflightResponse;
+      if (!response.ok) throw new Error(data.error || "The preflight service could not check this payment.");
+      setRiskCheckResult(data);
+    } catch (error) {
+      setRiskCheckResult({ status: "blocked", allowedToContinue: false, checks: [{ code: "preflight_unavailable", severity: "block", message: error instanceof Error ? error.message : "The preflight service is unavailable." }], disclaimer: "No transaction was sent." });
+    } finally {
+      setRiskCheckBusy(false);
+    }
+  }
+
   async function estimatePaymentFee() {
     if (!intent) return;
-    const provider = window.ethereum;
+    const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before estimating a transaction fee."); return; }
     if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient is not a wallet address. Resolve it before estimating fees."); return; }
     if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only."); return; }
@@ -504,7 +549,7 @@ export default function SonusWorkspace() {
 
   async function sendArcTestnetPayment() {
     if (!intent) return;
-    const provider = window.ethereum;
+    const provider = selectedProvider;
     if (!provider || !walletAddress) { setNotice("Connect a wallet before sending."); return; }
     if (intent.network !== "Arc Testnet" || intent.asset !== "USDC") { setNotice("Sending is enabled only for native USDC on Arc Testnet in this V1 preview."); return; }
     if (!EVM_ADDRESS_RE.test(intent.recipient)) { setNotice("Recipient must be a wallet address. Names are not resolved yet."); return; }
@@ -643,6 +688,71 @@ export default function SonusWorkspace() {
     setNotice("Saved “" + name + "” in this browser only. The address is not identity-verified.");
   }
 
+  function exportContacts() {
+    if (!savedContacts.length) {
+      setNotice("There are no saved contacts to export yet.");
+      return;
+    }
+    const backup = {
+      format: "sonus-contacts-v1",
+      exportedAt: new Date().toISOString(),
+      contacts: savedContacts.map(({ name, address }) => ({ name, address }))
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "sonus-contacts-backup.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    setNotice("Exported a local JSON backup. Keep it private because it contains recipient addresses.");
+  }
+
+  async function importContacts(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setContactFormError("");
+    setContactImportBusy(true);
+    try {
+      if (file.size > 2_000_000) throw new Error("Choose a contacts file under 2 MB.");
+      const result = parseContactImport(await file.text(), file.name) as {
+        contacts: Array<{ name: string; address: string }>;
+        rejected: number;
+      };
+      const merged = [...savedContacts];
+      let added = 0;
+      let duplicates = 0;
+      let conflicts = 0;
+      for (const imported of result.contacts) {
+        const addressMatch = merged.find(contact => contact.address.toLowerCase() === imported.address.toLowerCase());
+        const nameMatch = merged.find(contact => contact.name.toLowerCase() === imported.name.toLowerCase());
+        if (addressMatch) {
+          duplicates += 1;
+          continue;
+        }
+        if (nameMatch) {
+          conflicts += 1;
+          continue;
+        }
+        if (merged.length >= 200) break;
+        const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now() + added);
+        merged.push({ id, name: imported.name, address: imported.address, createdAt: Date.now() });
+        added += 1;
+      }
+      setSavedContacts(merged);
+      const capacitySkipped = Math.max(0, result.contacts.length - added - duplicates - conflicts);
+      setNotice(`Imported ${added} contact${added === 1 ? "" : "s"}. ${duplicates} duplicate address(es), ${conflicts} name conflict(s), ${result.rejected} invalid row(s), and ${capacitySkipped} over-capacity row(s) skipped.`);
+      if (!added && result.contacts.length === 0) setContactFormError("No valid contacts were found. Check the file's name and address columns.");
+    } catch (error) {
+      setContactFormError(error instanceof Error ? error.message : "Could not import this contacts file.");
+    } finally {
+      setContactImportBusy(false);
+    }
+  }
+
   function removeContact(contact: SavedContact) {
     setSavedContacts(current => current.filter(item => item.id !== contact.id));
     setNotice("Removed “" + contact.name + "” from this browser’s address book.");
@@ -654,6 +764,7 @@ export default function SonusWorkspace() {
   }
 
   function disconnectWalletView() {
+    disconnect();
     setWalletAddress(null);
     setWalletChainId(null);
     setWalletBalances({ native: null, status: "Not connected", updatedAt: null });
@@ -671,11 +782,37 @@ export default function SonusWorkspace() {
     Settings: "Make Sonus work your way."
   } as Record<string, string>)[active] || "Your money, in context.", [active]);
 
+  useEffect(() => {
+    if (!voiceReplyPending.current || assistantBusy) return;
+    const lastAssistantMessage = [...messages].reverse().find(message => message.role === "assistant");
+    if (!lastAssistantMessage) return;
+    voiceReplyPending.current = false;
+    if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      setNotice("Speech playback is not supported in this browser. You can still read the reply on screen.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(lastAssistantMessage.text.replace(/\n+/g, ". "));
+    utterance.rate = 1.02;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }, [messages, assistantBusy]);
+
+  useEffect(() => () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    recognition.current?.stop();
+  }, []);
+
   async function submitMessage(value = input) {
     const clean = value.trim();
     if (!clean || assistantBusy) return;
     setInput("");
     setActive("Overview");
+    setIntent(null);
     setAssistantBusy(true);
     setMessages(current => [...current, { role: "user", text: clean }]);
 
@@ -751,31 +888,54 @@ export default function SonusWorkspace() {
     if (typeof window === "undefined") return;
     const speechWindow = window as SpeechWindow;
     const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (listening) {
+      recognition.current?.stop();
+      setListening(false);
+      voiceReplyPending.current = false;
+      return;
+    }
+    if (assistantBusy) {
+      setNotice("Wait for Sonus to finish its current response before starting voice input.");
+      return;
+    }
     if (!SpeechRecognition) {
       setNotice("Voice input is not supported in this browser. Try a recent version of Chrome.");
       return;
     }
-    if (listening) {
-      recognition.current?.stop();
-      setListening(false);
-      return;
-    }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    setSpeaking(false);
+    voiceReplyPending.current = true;
     const engine = new SpeechRecognition();
     engine.lang = "en-US";
     engine.interimResults = false;
     engine.maxAlternatives = 1;
     engine.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || "";
-      setInput(transcript);
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim() || "";
       setListening(false);
-      if (transcript) submitMessage(transcript);
+      if (transcript) {
+        setInput(transcript);
+        void submitMessage(transcript);
+      } else {
+        voiceReplyPending.current = false;
+        setNotice("I didn’t catch that. Tap the microphone and try again.");
+      }
     };
-    engine.onerror = () => { setListening(false); setNotice("Could not capture speech. Check microphone permission and try again."); };
+    engine.onerror = () => {
+      voiceReplyPending.current = false;
+      setListening(false);
+      setNotice("Could not capture speech. Check microphone permission and try again.");
+    };
     engine.onend = () => setListening(false);
     recognition.current = engine;
     setListening(true);
     setNotice("Listening… speak your request.");
-    engine.start();
+    try {
+      engine.start();
+    } catch {
+      voiceReplyPending.current = false;
+      setListening(false);
+      setNotice("The microphone could not start. Check permission and try again.");
+    }
   }
 
   function navigate(label: string) {
@@ -829,8 +989,8 @@ export default function SonusWorkspace() {
 
         <div className="ws-content">
           <div className="ws-page-heading">
-            <div><p className="ws-eyebrow"><span /> YOUR FINANCIAL OVERVIEW</p><h1>{active === "Overview" ? <>Good afternoon<span className="ws-period">.</span></> : active}<span className="ws-period">{active === "Overview" ? "" : "."}</span></h1><p>{sectionSubtitle}</p></div>
-            <div className="ws-date"><span className="ws-live-dot" /> SUNDAY, OCTOBER 11, 2026</div>
+            <div><p className="ws-eyebrow"><span /> YOUR FINANCIAL OVERVIEW</p><h1>{active === "Overview" ? <>{greeting}<span className="ws-period">.</span></> : active}<span className="ws-period">{active === "Overview" ? "" : "."}</span></h1><p>{sectionSubtitle}</p></div>
+            <div className="ws-date"><span className="ws-live-dot" /> {currentDateLabel || "YOUR LOCAL DATE"}</div>
           </div>
 
           {active === "Overview" ? <>
@@ -874,6 +1034,8 @@ export default function SonusWorkspace() {
 
             <section className="ws-contacts-panel" aria-labelledby="ws-contacts-title">
               <div className="ws-section-heading"><div><h2 id="ws-contacts-title">Saved recipients</h2><p>Resolve names you have explicitly saved on this browser</p></div><span className="ws-contact-count">{savedContacts.length} / 200</span></div>
+              <input ref={contactImportRef} type="file" accept=".csv,.json,application/json,text/csv" onChange={importContacts} hidden />
+              <div className="ws-contact-import-row"><button type="button" disabled={contactImportBusy || savedContacts.length >= 200} onClick={() => contactImportRef.current?.click()}><FileUp size={14} /> {contactImportBusy ? "Importing…" : "Import contacts"}</button><button type="button" disabled={!savedContacts.length} onClick={exportContacts}><Download size={14} /> Export backup</button><span>CSV or JSON · processed locally</span></div>
               <form className="ws-contact-form" onSubmit={saveContact}>
                 <label><span>CONTACT NAME</span><input id="ws-contact-name-field" value={contactNameInput} onChange={event => setContactNameInput(event.target.value)} maxLength={50} placeholder="e.g. Alex" autoComplete="off" required /></label>
                 <label><span>EVM WALLET ADDRESS</span><input value={contactAddressInput} onChange={event => setContactAddressInput(event.target.value)} placeholder="0x…" autoComplete="off" spellCheck={false} required /></label>
@@ -889,11 +1051,64 @@ export default function SonusWorkspace() {
               <div className="ws-chat-window" aria-live="polite">{messages.slice(-4).map((message, i) => <div key={messages.length + "-" + i} className={"ws-message " + message.role}><span className="ws-message-avatar">{message.role === "assistant" ? <AudioLines size={14} /> : "O"}</span><p>{message.text}</p></div>)}{assistantBusy && <div className="ws-message assistant"><span className="ws-message-avatar"><AudioLines size={14} /></span><p>Thinking through your request…</p></div>}</div>
               {intent && <div className="ws-intent-card"><div className="ws-intent-header"><span><ShieldCheck size={15} /> PAYMENT DRAFT</span><span>NOT SENT</span></div><div className="ws-intent-main"><div><small>FROM WALLET</small><strong>{walletAddress ? walletAddress.slice(0, 9) + "…" + walletAddress.slice(-7) : "Connect wallet"}</strong>{walletAddress && <button className="ws-copy-address" onClick={async () => { try { await navigator.clipboard.writeText(walletAddress); setNotice("Connected wallet address copied."); } catch { setNotice("Could not copy automatically. Wallet address: " + walletAddress); } }}><Copy size={11} /> Copy address</button>}</div><div><small>RECIPIENT</small><strong>{intent.recipient}</strong><small className={EVM_ADDRESS_RE.test(intent.recipient) ? "ws-recipient-status valid" : "ws-recipient-status"}>{EVM_ADDRESS_RE.test(intent.recipient) ? (savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) ? "Saved contact address · not identity-verified" : "Address format only · not verified") : "Unresolved name · address required"}</small>{EVM_ADDRESS_RE.test(intent.recipient) && !savedContacts.some(contact => contact.address.toLowerCase() === intent.recipient.toLowerCase()) && <button type="button" className="ws-recipient-save" onClick={() => { setContactAddressInput(intent.recipient); setContactNameInput(""); document.getElementById("ws-contact-name-field")?.focus(); setNotice("Add a recognizable name for this address in Saved recipients. Verify the address independently before saving."); }}> <Plus size={11} /> Save to address book</button>}{EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && <a className="ws-explorer-link" href={"https://testnet.arcscan.app/address/" + intent.recipient} target="_blank" rel="noreferrer">View address on Arcscan <ExternalLink size={11} /></a>}</div><div><small>AMOUNT</small><strong>{intent.amount} {intent.asset}</strong></div><div><small>NETWORK</small><select aria-label="Choose transaction network" value={intent.network} onChange={e => setIntent(current => current ? { ...current, network: e.target.value } : current)}><option>Choose network</option><option>Arc Testnet</option><option>Ethereum</option><option>Arbitrum</option><option>Base</option></select></div><div><small>NOTE</small><strong>{intent.reason}</strong></div>{intent.feeEstimate && <div><small>NETWORK FEE</small><strong>{intent.feeEstimate}</strong></div>}</div><div className="ws-preview-checks"><strong>Before this can be sent</strong><span><Check size={13} /> Confirm the recipient address through a trusted channel</span><span><Check size={13} /> Confirm token and network compatibility</span><span><Check size={13} /> Load live balance and estimate network fees</span><span><Check size={13} /> Review the exact transaction in your wallet</span></div><p><LockKeyhole size={13} /> {paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction submitted; do not resend while its status is pending. Check the transaction status below." : "This is a draft until you choose “Send test payment” and approve the exact transaction in your wallet. Names are not resolved. Sending is restricted to native USDC on Arc Testnet."}</p><div className="ws-intent-buttons"><button onClick={() => { setNotice("Payment draft dismissed."); setIntent(null); }}>Dismiss draft</button><button onClick={() => { if (!EVM_ADDRESS_RE.test(intent.recipient)) setNotice("Recipient is unresolved. Enter a wallet address before proceeding."); else if (intent.network === "Choose network") setNotice("Choose a network before reviewing this payment."); else if (intent.network === "Arc Testnet" && intent.asset === "USDC") void estimatePaymentFee(); else setNotice("Fee estimation currently supports native USDC transfers on Arc Testnet only. Nothing was sent."); }} disabled={balanceBusy || paymentTx?.status === "submitted" || paymentTx?.status === "pending"}>{paymentTx?.status === "submitted" || paymentTx?.status === "pending" ? "Transaction pending" : balanceBusy ? "Checking…" : "Estimate fee"} <ArrowRight size={13} /></button>{intent.feeEstimate && EVM_ADDRESS_RE.test(intent.recipient) && intent.network === "Arc Testnet" && intent.asset === "USDC" && paymentTx?.status !== "submitted" && paymentTx?.status !== "pending" && paymentTx?.status !== "confirmed" && <button className="ws-send-payment-btn" onClick={() => void sendArcTestnetPayment()} disabled={balanceBusy}>{balanceBusy ? "Working…" : "Send test payment"} <ArrowUpRight size={13} /></button>}</div></div>}
               {paymentTx && <div className={"ws-payment-result " + paymentTx.status} role="status" aria-live="polite"><div><span className="ws-eyebrow">ON-CHAIN TRANSACTION</span><strong>{paymentTx.status === "confirmed" ? "Payment confirmed" : paymentTx.status === "failed" ? "Transaction failed" : paymentTx.status === "pending" ? "Confirmation pending" : "Transaction submitted"}</strong><small>{paymentTx.detail}</small><a href={"https://testnet.arcscan.app/tx/" + paymentTx.hash} target="_blank" rel="noreferrer">View transaction on Arcscan <ExternalLink size={12} /></a></div><button onClick={() => navigator.clipboard.writeText(paymentTx.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(paymentTx.hash))} aria-label="Copy transaction hash"><Copy size={15} /></button></div>}<div className="ws-prompt-chips">{starters.map(({ icon: Icon, label, prompt }) => <button key={label} onClick={() => submitMessage(prompt)}><Icon size={14} />{label}<ArrowUpRight size={12} /></button>)}</div>
-              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
-              <div className="ws-assistant-foot"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : "Voice input uses your browser’s speech recognition."}</span></div>
+              <form className="ws-composer" onSubmit={e => { e.preventDefault(); submitMessage(); }}><button type="button" className={listening ? "ws-mic-btn listening" : speaking ? "ws-mic-btn speaking" : "ws-mic-btn"} aria-label={listening ? "Stop voice input" : speaking ? "Interrupt spoken reply and use voice input" : "Use voice input"} onClick={startVoice}><Mic size={17} /></button><input id="ws-assistant-input" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Sonus to send, swap, or explain…" aria-label="Message Sonus" /><span className="ws-composer-hint"><Command size={11} /> Enter</span><button type="submit" className="ws-send-btn" aria-label="Send message" disabled={!input.trim() || assistantBusy}><Send size={16} /></button></form>
+              <div className="ws-assistant-foot" role="status" aria-live="polite" aria-atomic="true"><span><LockKeyhole size={12} /> You review before anything moves.</span><span>{listening ? "Listening…" : speaking ? "Speaking response… tap the mic to interrupt." : "Voice uses browser speech recognition and spoken replies."}</span></div>
             </section>
             <footer className="ws-footer"><span>SONUS / PRIVATE WORKSPACE</span><span>BUILT FOR CLARITY. DESIGNED FOR CONTROL.</span><button onClick={() => setNotice("Dashboard prices and portfolio examples are illustrative. Native USDC transfers are connected on Arc Testnet only; swaps, bridges, and other networks are not live.")}>What’s live? <ExternalLink size={12} /></button></footer>
-          </> : active === "Settings" ? <section className="ws-settings-page"><div className="ws-settings-heading"><span className="ws-eyebrow">SONUS / PAYMENT CONTROL</span><h2>Spending rules<span className="ws-period">.</span></h2><p>Optional browser-local guardrails for Arc Testnet native USDC payments. Rules are checked before wallet approval.</p><div className={"ws-settings-storage " + (spendingRulesStorageError ? "error" : "")}><span />{spendingRulesStorageError ? "Storage problem · payments paused" : spendingRulesReady ? "Rules loaded · " + (spendingRules.enabled || spendingRules.requireSavedRecipient ? "guardrails active" : "guardrails disabled") : "Loading saved rules…"}</div></div><div className="ws-settings-panel"><label className="ws-settings-toggle"><span><strong>Enable spending guardrails</strong><small>Block payments that exceed either limit below.</small></span><input type="checkbox" checked={spendingRules.enabled} onChange={event => setSpendingRules(current => ({ ...current, enabled: event.target.checked }))} /></label><label className="ws-settings-toggle"><span><strong>Only pay saved recipients</strong><small>Block recipients not in your local Contacts address book. Contact names are not identity-verified.</small></span><input type="checkbox" checked={spendingRules.requireSavedRecipient} onChange={event => setSpendingRules(current => ({ ...current, requireSavedRecipient: event.target.checked }))} /></label><label className="ws-settings-field"><span><strong>Maximum per payment</strong><small>Largest single USDC payment Sonus will allow.</small></span><span className="ws-settings-input"><input type="number" min="0.000001" max="1000000000" step="0.01" value={spendingRules.maxSingleUsdc} onChange={event => setSpendingRules(current => ({ ...current, maxSingleUsdc: event.target.value }))} /><b>USDC</b></span></label><label className="ws-settings-field"><span><strong>Daily recorded spending cap</strong><small>UTC calendar day; counts non-failed Sonus records for the active sender.</small></span><span className="ws-settings-input"><input type="number" min="0.000001" max="1000000000" step="0.01" value={spendingRules.dailyCapUsdc} onChange={event => setSpendingRules(current => ({ ...current, dailyCapUsdc: event.target.value }))} /><b>USDC</b></span></label><button className="ws-settings-save" type="button" onClick={() => { const valid = (value: string) => /^\d+(?:\.\d{1,6})?$/.test(value) && Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1000000000; if (!valid(spendingRules.maxSingleUsdc) || !valid(spendingRules.dailyCapUsdc)) { setNotice("Enter positive limits up to 1,000,000,000 USDC with no more than 6 decimal places."); return; } setSpendingRulesReady(true); try { window.localStorage.setItem("sonus:spending-rules:v1", JSON.stringify(spendingRules)); setSpendingRulesStorageError(false); setNotice("Spending rules saved in this browser."); } catch { setSpendingRulesStorageError(true); setNotice("Could not save spending rules to browser storage. Payments are paused until storage works."); } }}>Save spending rules</button><div className="ws-settings-usage"><div><span>RECORDED TODAY</span><strong>{walletAddress ? spendingUsedToday.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC" : "Connect wallet to view"}</strong></div><div><span>REMAINING UNDER CAP</span><strong>{walletAddress ? spendingRemainingToday.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC" : "—"}</strong></div><small>Based only on locally saved Sonus records for the connected address and today in UTC.</small></div></div><div className="ws-settings-disclaimer"><LockKeyhole size={14} /><p>These are convenience guardrails, not on-chain permissions. Browser storage can be edited or cleared, and the daily total only includes up to 100 Sonus transaction records visible in this browser. They do not protect other wallet apps or transactions made elsewhere. Always review the amount, recipient, network, and fee in your wallet.</p></div></section> : active === "Activity" ? <section className="ws-history-page"><div className="ws-history-heading"><span className="ws-eyebrow">SONUS / LOCAL TRANSACTION MEMORY</span><h2>Transaction history<span className="ws-period">.</span></h2><p>Records of transactions submitted through this Sonus browser. This is not a full wallet indexer.</p><button className="ws-history-refresh" type="button" onClick={() => void refreshTransactionStatuses()} disabled={historyRefreshing || !transactionHistory.some(item => item.status === "pending" || item.status === "submitted")}>{historyRefreshing ? <RefreshCw size={13} className="ws-spin" /> : <RefreshCw size={13} />}{historyRefreshing ? "Checking receipts…" : "Refresh pending status"}</button><button className="ws-history-refresh" type="button" onClick={exportTransactionHistory} disabled={!transactionHistory.length}><Download size={13} /> Export memory</button><div className="ws-history-tools"><label className="ws-history-search"><Search size={14} /><input value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} placeholder="Search recipient, note, amount, or hash" aria-label="Search transaction history" /><button type="button" aria-label="Clear transaction search" onClick={() => setHistoryQuery("")} disabled={!historyQuery}><X size={13} /></button></label><label className="ws-history-filter"><span>STATUS</span><select value={historyStatusFilter} onChange={event => setHistoryStatusFilter(event.target.value)} aria-label="Filter transactions by status"><option value="all">All statuses</option><option value="confirmed">Confirmed</option><option value="pending">Pending</option><option value="submitted">Submitted</option><option value="failed">Failed</option></select></label></div><div className="ws-history-summary"><div><span>RECORDED</span><strong>{transactionHistory.length}</strong></div><div><span>CONFIRMED</span><strong>{transactionHistory.filter(item => item.status === "confirmed").length}</strong></div><div><span>NEEDS CHECK</span><strong>{transactionHistory.filter(item => item.status === "pending" || item.status === "submitted").length}</strong></div></div></div>{visibleTransactions.length ? <div className="ws-history-list">{visibleTransactions.map(item => <article className="ws-history-card" key={item.hash}><div className="ws-history-card-top"><span className={"ws-history-status " + item.status}>{item.status}</span><time>{new Date(item.createdAt).toLocaleString()}</time></div><div className="ws-history-transfer"><div><small>TO</small><strong>{item.to.slice(0, 12) + "…" + item.to.slice(-8)}</strong></div><div><small>AMOUNT</small><strong>{item.amount} {item.asset}</strong></div><div><small>NETWORK</small><strong>{item.network}</strong></div></div><p>{item.detail}</p>{item.policySummary && <small className="ws-history-block">Policy at submission: {item.policySummary}</small>}{item.blockNumber && <small className="ws-history-block">Block {item.blockNumber}</small>}<label className="ws-history-note"><span><span>PAYMENT NOTE</span><small>Private to this browser · never sent on-chain</small></span><textarea value={item.note || ""} maxLength={240} rows={2} placeholder="What was this payment for? (optional)" onChange={event => setTransactionHistory(current => current.map(record => record.hash === item.hash ? { ...record, note: event.target.value.slice(0, 240), updatedAt: Date.now() } : record))} /></label><div className="ws-history-actions"><button onClick={() => { void navigator.clipboard.writeText(item.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(item.hash)); }}><Copy size={13} /> Copy hash</button><a href={"https://testnet.arcscan.app/tx/" + item.hash} target="_blank" rel="noreferrer">Open in Arcscan <ExternalLink size={13} /></a></div></article>)}</div> : <div className="ws-history-empty"><History size={24} /><h3>{transactionHistory.length ? "No matching transactions" : "No transactions recorded yet"}</h3><p>{transactionHistory.length ? "Try another search or choose a different status filter." : "Once you approve an Arc Testnet payment in your wallet, Sonus will save its transaction hash and update the record as confirmation is checked."}</p><button className="ws-connect-btn" onClick={() => navigate("Overview")}><ArrowRight size={15} /> Prepare a payment</button></div>}<p className="ws-history-disclaimer"><LockKeyhole size={13} /> Saved in this browser only under local storage. Records can be cleared with browser data and are not synced. Status reflects Sonus’s initial RPC polling; verify the latest status in Arcscan before retrying a pending payment.</p></section> : <section className="ws-placeholder-page"><div className="ws-placeholder-icon">{active === "Portfolio" ? <Wallet size={24} /> : active === "Activity" ? <History size={24} /> : active === "Intelligence" ? <Sparkles size={24} /> : active === "Settings" ? <Settings2 size={24} /> : <ArrowLeftRight size={24} />}</div><span className="ws-eyebrow">SONUS / V1 PREVIEW</span><h2>{active}<span className="ws-period">.</span></h2><p>{active === "Portfolio" ? "Your assets will appear here after wallet connections and live balance indexing are integrated." : active === "Activity" ? "Your confirmed transactions will appear here after wallet and chain indexing are connected." : active === "Swap" ? (swapCapabilities?.reason || (swapCapabilitiesError ? "Arc/Circle swap status could not be loaded. No swap quote or execution is available." : "Checking Arc/Circle swap readiness…")) : active === "Bridge" ? "Cross-chain routes, bridge providers, fee estimates, and settlement tracking will be integrated here." : active === "Stake" ? "Staking opportunities, protocol risk information, and position tracking will appear here when supported integrations are selected." : active === "Intelligence" ? "A home for market context, wallet-risk signals, transaction explanations, and portfolio insights. Live BTC, ETH, SOL, and USDC spot-price snapshots are connected; portfolio and wallet-risk intelligence still need integrations." : "Manage wallet connections, networks, permissions, privacy, and spending rules as those controls are implemented."}</p><div className="ws-placeholder-status"><span className="ws-status-dot" /> {active === "Swap" ? (swapCapabilities?.quoteAvailable && swapCapabilities?.executionAvailable ? "Arc/Circle swap ready" : swapCapabilitiesError ? "Provider status unavailable" : "Arc/Circle provider unverified · Not ready") : "Interface scaffolded"} <span className="ws-status-separator">·</span> {active === "Swap" ? (swapCapabilities?.supportedEnvironment?.arcTestnet?.supportedTokens ? "Arc Testnet pairs: " + swapCapabilities.supportedEnvironment.arcTestnet.supportedTokens.join(", ") : "No live quote") : "Integration pending"}</div><button className="ws-connect-btn" onClick={() => navigate("Overview")}><ArrowRight size={15} /> Back to overview</button></section>}
+          </> : active === "Portfolio" ? <section className="ws-portfolio-page">
+            <div className="ws-portfolio-heading">
+              <span className="ws-eyebrow">SONUS / PORTFOLIO SNAPSHOT</span>
+              <h2>Your portfolio<span className="ws-period">.</span></h2>
+              <p>A live read of your connected wallet on Arc Testnet, with separate market-price snapshots. This is not a multi-chain portfolio valuation.</p>
+            </div>
+            <div className="ws-portfolio-primary">
+              <div className="ws-portfolio-balance">
+                <span>ARC TESTNET · NATIVE USDC</span>
+                <strong>{walletAddress ? (walletBalances.native ?? "—") : "Connect wallet"}</strong>
+                <small>{walletAddress ? walletBalances.status : "Connect a wallet to read your balance."}</small>
+                <div className="ws-portfolio-actions">
+                  {walletAddress && <button type="button" onClick={walletChainId === ARC_TESTNET_CHAIN_ID ? refreshWalletBalances : switchToArcTestnet} disabled={balanceBusy}>{balanceBusy ? "Refreshing…" : walletChainId === ARC_TESTNET_CHAIN_ID ? "Refresh balance" : "Switch to Arc Testnet"}</button>}
+                  <button type="button" onClick={() => setMarketRefreshNonce(value => value + 1)} disabled={marketLoading}>{marketLoading ? "Refreshing market…" : "Refresh market data"}</button>
+                </div>
+                {walletBalances.updatedAt && <small>Balance checked {new Date(walletBalances.updatedAt).toLocaleString()}</small>}
+              </div>
+              <div className="ws-portfolio-wallet">
+                <span>CONNECTED WALLET</span>
+                <strong>{walletAddress ? walletAddress.slice(0, 12) + "…" + walletAddress.slice(-8) : "Not connected"}</strong>
+                <small>{walletChainId === ARC_TESTNET_CHAIN_ID ? "Arc Testnet connected" : walletAddress ? "Wrong network for the live balance read" : "Connect your wallet from Overview"}</small>
+                {walletAddress && <a href={"https://testnet.arcscan.app/address/" + walletAddress} target="_blank" rel="noreferrer">View on Arcscan <ExternalLink size={12} /></a>}
+              </div>
+            </div>
+            <div className="ws-portfolio-market-heading"><div><span className="ws-eyebrow">MARKET WATCH</span><h3>Spot prices</h3></div><span>{marketUpdatedAt ? "Updated " + new Date(marketUpdatedAt).toLocaleTimeString() : marketLoading ? "Loading live data…" : "Live data unavailable"}</span></div>
+            {marketError && <p className="ws-portfolio-error" role="status">{marketError} Prices are not replaced with sample values.</p>}
+            <div className="ws-portfolio-markets">{marketRows.map(asset => <article className="ws-portfolio-market" key={asset.symbol}><span>{asset.symbol}</span><strong>{asset.price}</strong><small className={asset.up ? "positive" : "negative"}>{asset.change} <span>24h</span></small></article>)}</div>
+            <div className="ws-portfolio-disclaimer"><LockKeyhole size={14} /><p>Only native USDC on Arc Testnet is currently read from your wallet. BTC, ETH, SOL and USDC market prices are informational spot snapshots, not your holdings. Testnet funds have no real-world value. Other chains, tokens, NFTs, DeFi positions, and historical portfolio performance are not indexed.</p></div>
+          </section> : active === "Intelligence" ? <section className="ws-intelligence-page">
+            <div className="ws-intelligence-heading">
+              <span className="ws-eyebrow">SONUS / PAYMENT INTELLIGENCE</span>
+              <h2>See the full picture<span className="ws-period">.</span></h2>
+              <p>Live market context and deterministic transaction checks. Sonus clearly separates basic validation from real security scanning.</p>
+            </div>
+            <div className="ws-intelligence-market-header"><div><span className="ws-eyebrow">LIVE MARKET SNAPSHOT</span><h3>Market watch</h3></div><button type="button" onClick={() => setMarketRefreshNonce(value => value + 1)} disabled={marketLoading}>{marketLoading ? "Loading…" : "Refresh prices"}</button></div>
+            {marketError && <p className="ws-portfolio-error" role="status">{marketError} Current prices could not be verified.</p>}
+            <div className="ws-portfolio-markets">{marketRows.map(asset => <article className="ws-portfolio-market" key={asset.symbol}><span>{asset.symbol}</span><strong>{asset.price}</strong><small className={asset.up ? "positive" : "negative"}>{asset.change} <span>24h</span></small></article>)}</div>
+            <p className="ws-intelligence-updated">{marketUpdatedAt ? "Market snapshot updated " + new Date(marketUpdatedAt).toLocaleString() : marketLoading ? "Loading market data…" : "No verified market snapshot available."}</p>
+            <section className="ws-intelligence-check" aria-labelledby="ws-risk-check-title">
+              <div><span className="ws-eyebrow">TRANSACTION RISK PREFLIGHT</span><h3 id="ws-risk-check-title">Check a payment before you send</h3><p>This validates address format, sender/recipient mismatch, amount, and supported route. It does not scan scams or prove who owns an address.</p></div>
+              <form onSubmit={event => { event.preventDefault(); void runRecipientPreflight(); }}>
+                <label><span>RECIPIENT EVM ADDRESS</span><input value={riskRecipientInput} onChange={event => { setRiskRecipientInput(event.target.value); setRiskCheckResult(null); }} placeholder="0x…" spellCheck={false} autoComplete="off" required /></label>
+                <label><span>AMOUNT (NATIVE USDC)</span><input value={riskAmountInput} onChange={event => { setRiskAmountInput(event.target.value); setRiskCheckResult(null); }} inputMode="decimal" placeholder="25" required /></label>
+                <div className="ws-intelligence-sender"><span>SENDING FROM</span><strong>{walletAddress ? walletAddress.slice(0, 12) + "…" + walletAddress.slice(-8) : "Connect a wallet first"}</strong><small>{walletChainId === ARC_TESTNET_CHAIN_ID ? "Arc Testnet" : walletChainId ? "Wrong network · switch to Arc Testnet" : "No connected network"}</small></div>
+                <button type="submit" disabled={riskCheckBusy || !walletAddress}>{riskCheckBusy ? "Checking parameters…" : "Run preflight check"}</button>
+              </form>
+              {riskCheckResult && <div className={"ws-risk-result " + (riskCheckResult.allowedToContinue ? "review" : "blocked")} role="status">
+                <strong>{riskCheckResult.status === "blocked" ? "Blocked by parameter checks" : riskCheckResult.status === "review" ? "Basic checks passed · review warnings" : "Checks complete"}</strong>
+                {riskCheckResult.checks?.map((check, index) => <p key={check.code + index}><span>{check.severity === "block" ? "BLOCK" : "WARNING"}</span>{check.message}</p>)}
+                {riskCheckResult.disclaimer && <small>{riskCheckResult.disclaimer}</small>}
+              </div>}
+            </section>
+            <div className="ws-portfolio-disclaimer"><LockKeyhole size={14} /><p>Price snapshots are informational, not trading advice. The preflight is deterministic parameter validation only: it is not an address reputation service, phishing scanner, transaction simulation, or guarantee of safety. Your wallet must still review and authorize every transaction.</p></div>
+          </section> : active === "Settings" ? <section className="ws-settings-page"><div className="ws-settings-heading"><span className="ws-eyebrow">SONUS / PAYMENT CONTROL</span><h2>Spending rules<span className="ws-period">.</span></h2><p>Optional browser-local guardrails for Arc Testnet native USDC payments. Rules are checked before wallet approval.</p><div className={"ws-settings-storage " + (spendingRulesStorageError ? "error" : "")}><span />{spendingRulesStorageError ? "Storage problem · payments paused" : spendingRulesReady ? "Rules loaded · " + (spendingRules.enabled || spendingRules.requireSavedRecipient ? "guardrails active" : "guardrails disabled") : "Loading saved rules…"}</div></div><div className="ws-settings-panel"><label className="ws-settings-toggle"><span><strong>Enable spending guardrails</strong><small>Block payments that exceed either limit below.</small></span><input type="checkbox" checked={spendingRules.enabled} onChange={event => setSpendingRules(current => ({ ...current, enabled: event.target.checked }))} /></label><label className="ws-settings-toggle"><span><strong>Only pay saved recipients</strong><small>Block recipients not in your local Contacts address book. Contact names are not identity-verified.</small></span><input type="checkbox" checked={spendingRules.requireSavedRecipient} onChange={event => setSpendingRules(current => ({ ...current, requireSavedRecipient: event.target.checked }))} /></label><label className="ws-settings-field"><span><strong>Maximum per payment</strong><small>Largest single USDC payment Sonus will allow.</small></span><span className="ws-settings-input"><input type="number" min="0.000001" max="1000000000" step="0.01" value={spendingRules.maxSingleUsdc} onChange={event => setSpendingRules(current => ({ ...current, maxSingleUsdc: event.target.value }))} /><b>USDC</b></span></label><label className="ws-settings-field"><span><strong>Daily recorded spending cap</strong><small>UTC calendar day; counts non-failed Sonus records for the active sender.</small></span><span className="ws-settings-input"><input type="number" min="0.000001" max="1000000000" step="0.01" value={spendingRules.dailyCapUsdc} onChange={event => setSpendingRules(current => ({ ...current, dailyCapUsdc: event.target.value }))} /><b>USDC</b></span></label><button className="ws-settings-save" type="button" onClick={() => { const valid = (value: string) => /^\d+(?:\.\d{1,6})?$/.test(value) && Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1000000000; if (!valid(spendingRules.maxSingleUsdc) || !valid(spendingRules.dailyCapUsdc)) { setNotice("Enter positive limits up to 1,000,000,000 USDC with no more than 6 decimal places."); return; } setSpendingRulesReady(true); try { window.localStorage.setItem("sonus:spending-rules:v1", JSON.stringify(spendingRules)); setSpendingRulesStorageError(false); setNotice("Spending rules saved in this browser."); } catch { setSpendingRulesStorageError(true); setNotice("Could not save spending rules to browser storage. Payments are paused until storage works."); } }}>Save spending rules</button><div className="ws-settings-usage"><div><span>RECORDED TODAY</span><strong>{walletAddress ? spendingUsedToday.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC" : "Connect wallet to view"}</strong></div><div><span>REMAINING UNDER CAP</span><strong>{walletAddress ? spendingRemainingToday.toLocaleString(undefined, { maximumFractionDigits: 6 }) + " USDC" : "—"}</strong></div><small>Based only on locally saved Sonus records for the connected address and today in UTC.</small></div></div><div className="ws-settings-disclaimer"><LockKeyhole size={14} /><p>These are convenience guardrails, not on-chain permissions. Browser storage can be edited or cleared, and the daily total only includes up to 100 Sonus transaction records visible in this browser. They do not protect other wallet apps or transactions made elsewhere. Always review the amount, recipient, network, and fee in your wallet.</p></div></section> : active === "Activity" ? <section className="ws-history-page"><div className="ws-history-heading"><span className="ws-eyebrow">SONUS / LOCAL TRANSACTION MEMORY</span><h2>Transaction history<span className="ws-period">.</span></h2><p>Records of transactions submitted through this Sonus browser. This is not a full wallet indexer.</p><button className="ws-history-refresh" type="button" onClick={() => void refreshTransactionStatuses()} disabled={historyRefreshing || !transactionHistory.some(item => item.status === "pending" || item.status === "submitted")}>{historyRefreshing ? <RefreshCw size={13} className="ws-spin" /> : <RefreshCw size={13} />}{historyRefreshing ? "Checking receipts…" : "Refresh pending status"}</button><button className="ws-history-refresh" type="button" onClick={exportTransactionHistory} disabled={!transactionHistory.length}><Download size={13} /> Export memory</button><div className="ws-history-tools"><label className="ws-history-search"><Search size={14} /><input value={historyQuery} onChange={event => setHistoryQuery(event.target.value)} placeholder="Search recipient, note, amount, or hash" aria-label="Search transaction history" /><button type="button" aria-label="Clear transaction search" onClick={() => setHistoryQuery("")} disabled={!historyQuery}><X size={13} /></button></label><label className="ws-history-filter"><span>STATUS</span><select value={historyStatusFilter} onChange={event => setHistoryStatusFilter(event.target.value)} aria-label="Filter transactions by status"><option value="all">All statuses</option><option value="confirmed">Confirmed</option><option value="pending">Pending</option><option value="submitted">Submitted</option><option value="failed">Failed</option></select></label></div><div className="ws-history-summary"><div><span>RECORDED</span><strong>{transactionHistory.length}</strong></div><div><span>CONFIRMED</span><strong>{transactionHistory.filter(item => item.status === "confirmed").length}</strong></div><div><span>NEEDS CHECK</span><strong>{transactionHistory.filter(item => item.status === "pending" || item.status === "submitted").length}</strong></div></div></div>{visibleTransactions.length ? <div className="ws-history-list">{visibleTransactions.map(item => <article className="ws-history-card" key={item.hash}><div className="ws-history-card-top"><span className={"ws-history-status " + item.status}>{item.status}</span><time>{new Date(item.createdAt).toLocaleString()}</time></div><div className="ws-history-transfer"><div><small>TO</small><strong>{item.to.slice(0, 12) + "…" + item.to.slice(-8)}</strong></div><div><small>AMOUNT</small><strong>{item.amount} {item.asset}</strong></div><div><small>NETWORK</small><strong>{item.network}</strong></div></div><p>{item.detail}</p>{item.policySummary && <small className="ws-history-block">Policy at submission: {item.policySummary}</small>}{item.blockNumber && <small className="ws-history-block">Block {item.blockNumber}</small>}<label className="ws-history-note"><span><span>PAYMENT NOTE</span><small>Private to this browser · never sent on-chain</small></span><textarea value={item.note || ""} maxLength={240} rows={2} placeholder="What was this payment for? (optional)" onChange={event => setTransactionHistory(current => current.map(record => record.hash === item.hash ? { ...record, note: event.target.value.slice(0, 240), updatedAt: Date.now() } : record))} /></label><div className="ws-history-actions"><button onClick={() => { void navigator.clipboard.writeText(item.hash).then(() => setNotice("Transaction hash copied.")).catch(() => setNotice(item.hash)); }}><Copy size={13} /> Copy hash</button><a href={"https://testnet.arcscan.app/tx/" + item.hash} target="_blank" rel="noreferrer">Open in Arcscan <ExternalLink size={13} /></a></div></article>)}</div> : <div className="ws-history-empty"><History size={24} /><h3>{transactionHistory.length ? "No matching transactions" : "No transactions recorded yet"}</h3><p>{transactionHistory.length ? "Try another search or choose a different status filter." : "Once you approve an Arc Testnet payment in your wallet, Sonus will save its transaction hash and update the record as confirmation is checked."}</p><button className="ws-connect-btn" onClick={() => navigate("Overview")}><ArrowRight size={15} /> Prepare a payment</button></div>}<p className="ws-history-disclaimer"><LockKeyhole size={13} /> Saved in this browser only under local storage. Records can be cleared with browser data and are not synced. Status reflects Sonus’s initial RPC polling; verify the latest status in Arcscan before retrying a pending payment.</p></section> : active === "Portfolio" ? <section className="ws-history-page"><div className="ws-history-heading"><span className="ws-eyebrow">SONUS / LIVE WALLET SNAPSHOT</span><h2>Portfolio overview<span className="ws-period">.</span></h2><p>Live native USDC balance on Arc Testnet, plus current market snapshots. This is not a complete multi-chain portfolio.</p><div className="ws-history-refresh-row"><button className="ws-history-refresh" type="button" onClick={() => walletAddress ? (walletChainId === ARC_TESTNET_CHAIN_ID ? void refreshWalletBalances() : void switchToArcTestnet()) : void connectWallet()} disabled={walletBusy || balanceBusy}>{balanceBusy || walletBusy ? <RefreshCw size={13} className="ws-spin" /> : <RefreshCw size={13} />}{!walletAddress ? "Connect wallet" : walletChainId === ARC_TESTNET_CHAIN_ID ? "Refresh live balance" : "Switch to Arc Testnet"}</button><button className="ws-history-refresh" type="button" onClick={() => { setMarketLoading(true); setMarketRefreshNonce(value => value + 1); }} disabled={marketLoading}>{marketLoading ? <RefreshCw size={13} className="ws-spin" /> : <RefreshCw size={13} />}Refresh market data</button></div></div><div className="ws-history-summary"><div><span>NETWORK</span><strong>{walletChainId === ARC_TESTNET_CHAIN_ID ? "Arc Testnet" : walletChainId ? "Unverified chain" : "Not connected"}</strong></div><div><span>NATIVE USDC BALANCE</span><strong>{walletBalances.native !== null ? walletBalances.native + " USDC" : "Unavailable"}</strong></div><div><span>LAST BALANCE READ</span><strong>{walletBalances.updatedAt ? new Date(walletBalances.updatedAt).toLocaleTimeString() : "Not checked"}</strong></div></div><article className="ws-history-card"><div className="ws-history-card-top"><span className={"ws-history-status " + (walletAddress ? "confirmed" : "pending")}>{walletAddress ? "Wallet connected" : "Wallet disconnected"}</span><span>{walletAddress ? walletAddress.slice(0, 10) + "…" + walletAddress.slice(-8) : "Connect a wallet to begin"}</span></div><div className="ws-history-transfer"><div><small>ASSET</small><strong>Native USDC</strong></div><div><small>NETWORK</small><strong>Arc Testnet · 5042002</strong></div><div><small>READ STATUS</small><strong>{walletBalances.status}</strong></div></div><p>The balance is read from the connected wallet’s current RPC provider. Sonus does not request a signature to read it. Testnet balances are not real funds.</p>{walletAddress && <div className="ws-history-actions"><button type="button" onClick={() => { void navigator.clipboard.writeText(walletAddress).then(() => setNotice("Wallet address copied.")).catch(() => setNotice(walletAddress)); }}><Copy size={13} /> Copy receive address</button></div>}</article><div className="ws-history-heading ws-portfolio-market-heading"><span className="ws-eyebrow">MARKET SNAPSHOT</span><h3>Spot prices</h3><p>{marketUpdatedAt ? "Updated " + new Date(marketUpdatedAt).toLocaleString() + " · Source: CoinGecko" : marketError || "Waiting for market data."}</p></div><div className="ws-market-table"><div className="ws-table-head"><span>ASSET</span><span>PRICE</span><span>24H</span><span /></div>{markets.map(asset => { const quote = marketQuotes.find(item => item.symbol === asset.symbol); return <div className="ws-market-row" key={asset.symbol}><span className={"ws-coin ws-coin-" + asset.symbol.toLowerCase()}>{asset.mark}</span><div className="ws-asset-name"><strong>{asset.symbol}</strong><small>{asset.name}</small></div><strong>{quote ? formatUsd(quote.priceUsd) : marketLoading ? "Loading…" : "Unavailable"}</strong><span className={quote && quote.change24h < 0 ? "negative" : "positive"}>{quote ? (quote.change24h > 0 ? "+" : "") + quote.change24h.toFixed(2) + "%" : "—"}</span></div>; })}</div><p className="ws-history-disclaimer"><LockKeyhole size={13} /> This view shows one connected wallet’s native Arc Testnet balance and market reference prices only. It does not index ERC-20 tokens, other networks, NFTs, DeFi positions, or assets held in other wallets. Prices are informational and do not represent the value of testnet funds.</p></section> : <section className="ws-placeholder-page"><div className="ws-placeholder-icon">{active === "Portfolio" ? <Wallet size={24} /> : active === "Activity" ? <History size={24} /> : active === "Intelligence" ? <Sparkles size={24} /> : active === "Settings" ? <Settings2 size={24} /> : <ArrowLeftRight size={24} />}</div><span className="ws-eyebrow">SONUS / V1 PREVIEW</span><h2>{active}<span className="ws-period">.</span></h2><p>{active === "Portfolio" ? "Your assets will appear here after wallet connections and live balance indexing are integrated." : active === "Activity" ? "Your confirmed transactions will appear here after wallet and chain indexing are connected." : active === "Swap" ? (swapCapabilities?.reason || (swapCapabilitiesError ? "Arc/Circle swap status could not be loaded. No swap quote or execution is available." : "Checking Arc/Circle swap readiness…")) : active === "Bridge" ? "Cross-chain routes, bridge providers, fee estimates, and settlement tracking will be integrated here." : active === "Stake" ? "Staking opportunities, protocol risk information, and position tracking will appear here when supported integrations are selected." : active === "Intelligence" ? "A home for market context, wallet-risk signals, transaction explanations, and portfolio insights. Live BTC, ETH, SOL, and USDC spot-price snapshots are connected; portfolio and wallet-risk intelligence still need integrations." : "Manage wallet connections, networks, permissions, privacy, and spending rules as those controls are implemented."}</p><div className="ws-placeholder-status"><span className="ws-status-dot" /> {active === "Swap" ? (swapCapabilities?.quoteAvailable && swapCapabilities?.executionAvailable ? "Arc/Circle swap ready" : swapCapabilitiesError ? "Provider status unavailable" : "Arc/Circle provider unverified · Not ready") : "Interface scaffolded"} <span className="ws-status-separator">·</span> {active === "Swap" ? (swapCapabilities?.supportedEnvironment?.arcTestnet?.supportedTokens ? "Arc Testnet pairs: " + swapCapabilities.supportedEnvironment.arcTestnet.supportedTokens.join(", ") : "No live quote") : "Integration pending"}</div><button className="ws-connect-btn" onClick={() => navigate("Overview")}><ArrowRight size={15} /> Back to overview</button></section>}
         </div>
       </section>
     </main>

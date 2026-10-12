@@ -21,6 +21,14 @@ test("rejects malformed JSON, null, arrays, missing fields, and oversized payloa
   assert.equal(parseRiskPayload("é".repeat(4001)).status, 413, "limit is measured in UTF-8 bytes");
 });
 
+test("rejects non-integer, unsafe, or non-positive chain IDs at the request boundary", () => {
+  for (const chainId of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "5042002", null]) {
+    const result = parseRiskPayload(JSON.stringify({ ...valid(), chainId }));
+    assert.equal(result.ok, false, "invalid chain ID should be rejected: " + String(chainId));
+    if (!result.ok) assert.equal(result.status, 400);
+  }
+});
+
 test("allows a valid Arc Testnet transfer only with explicit review warnings", () => {
   const result = evaluateRiskPayload(valid());
   assert.equal(result.allowedToContinue, true);
