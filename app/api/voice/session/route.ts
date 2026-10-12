@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       "Speak naturally and concisely. Ask a short clarifying question when a request is ambiguous.",
       "Never claim a payment was sent, a balance was checked, a live price was verified, or a transaction was simulated.",
       "You cannot access wallets or execute transactions. A separate Sonus review flow must prepare and display any payment draft.",
+      "You cannot read the user's local transaction history, connected wallet balances, or saved contacts. Never invent prior payments or claim to have inspected the user's wallet."
       "Never infer or invent a wallet address from a name or social handle.",
       "Never ask for seed phrases, private keys, or wallet passwords.",
       "Sonus currently supports native USDC transfers on Arc Testnet only. Other networks and assets are not executable in this workspace.",
