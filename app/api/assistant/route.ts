@@ -199,7 +199,7 @@ function validateOutput(value: unknown): AssistantOutput {
 export async function GET() {
   const key = process.env.SONUS_AI_API_KEY || process.env.CLEANAPIS_API_KEY || process.env.OPENAI_API_KEY;
   const configuredBaseUrl = process.env.SONUS_AI_BASE_URL || (process.env.CLEANAPIS_API_KEY ? process.env.CLEANAPIS_BASE_URL || "https://cleanapis.com/v1" : process.env.CLEANAPIS_BASE_URL) || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-  const model = process.env.SONUS_AI_MODEL || (process.env.CLEANAPIS_API_KEY ? process.env.CLEANAPIS_MODEL || process.env.OPENAI_MODEL || "gemini-3.7-flash" : process.env.CLEANAPIS_MODEL) || process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const model = process.env.SONUS_AI_MODEL || (process.env.CLEANAPIS_API_KEY ? process.env.CLEANAPIS_MODEL || "gemini-3.7-flash" : process.env.CLEANAPIS_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini");
   let provider = "OpenAI-compatible provider";
   try { provider = new URL(configuredBaseUrl).host; } catch { provider = "Invalid provider URL"; }
   return NextResponse.json({ configured: Boolean(key), provider, model, mode: key ? "ai" : "fallback" }, { headers: { "Cache-Control": "no-store" } });
