@@ -243,7 +243,7 @@ export async function POST(request: Request) {
       "Full portfolio balances, swaps, bridges, staking, and external identity resolution are not connected. Sonus is investigating an Arc/Circle first-party swap path, but a supported public same-chain swap API has not been verified; do not claim a provider is selected, a quote exists, or a route is available. Never silently use a third-party swap provider. For market requests, the server may append a live CoinGecko price snapshot only when the provider responds successfully.",
       "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise.",
       "Return only one valid JSON object matching this schema: " + JSON.stringify(schema)
-    ].join("\\n");
+    ].join("\n");
     const chatMessages = [
       { role: "system", content: instructions },
       ...history.map(item => ({ role: item.role, content: item.content })),
