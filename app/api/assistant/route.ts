@@ -228,50 +228,74 @@ export async function POST(request: Request) {
   };
 
   try {
-    const upstream = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(25000),
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-        store: false,
-        instructions: [
-          "You are Sonus, a careful crypto payment-intelligence assistant.",
-          "Help the user clarify intent and plan safe actions. You cannot execute transactions or access a wallet.",
-          "Never claim a payment was sent, a balance was checked, a price is current, a quote was obtained, or a transaction was simulated.",
-          "Do not treat a name or handle as a resolved wallet address. Never infer a recipient address.",
-          "A valid EVM address string does not verify ownership or destination correctness.",
-          "For transfers, extract only details explicitly stated. If amount, asset, recipient, or network is missing or ambiguous, set needsClarification=true and ask a concise question.",
-          "Only use action transfer when the user clearly requests sending, paying, or transferring. Never convert advice or hypotheticals into an execution request.",
-          "Allowed assets: USDC, USDT, ETH, SOL, BTC. Allowed chain values: Arc Testnet, Ethereum, Arbitrum, Base, Solana, unknown. Use unknown when not explicitly clear.",
-          "Sonus currently supports only native USDC transfers on Arc Testnet. Other assets and chains may be discussed or drafted but must never be represented as executable.",
-          "Full portfolio balances, swaps, bridges, staking, and external identity resolution are not connected. Sonus is investigating an Arc/Circle first-party swap path, but a supported public same-chain swap API has not been verified; do not claim a provider is selected, a quote exists, or a route is available. Never silently use a third-party swap provider. For market requests, the server may append a live CoinGecko price snapshot only when the provider responds successfully.",
-          "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise."
-        ].join("\n"),
-        input: [
-          ...history.map((item) => ({ role: item.role, content: item.content })),
-          { role: "user", content: message }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "sonus_assistant_response",
-            strict: true,
-            schema
-          }
-        },
-        max_output_tokens: 700
-      })
+    const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/+$/, "");
+    const endpoint = baseUrl.endsWith("/chat/completions") ? baseUrl : baseUrl + "/chat/completions";
+    const instructions = [
+      "You are Sonus, a careful crypto payment-intelligence assistant.",
+      "Help the user clarify intent and plan safe actions. You cannot execute transactions or access a wallet.",
+      "Never claim a payment was sent, a balance was checked, a price is current, a quote was obtained, or a transaction was simulated.",
+      "Do not treat a name or handle as a resolved wallet address. Never infer a recipient address.",
+      "A valid EVM address string does not verify ownership or destination correctness.",
+      "For transfers, extract only details explicitly stated. If amount, asset, recipient, or network is missing or ambiguous, set needsClarification=true and ask a concise question.",
+      "Only use action transfer when the user clearly requests sending, paying, or transferring. Never convert advice or hypotheticals into an execution request.",
+      "Allowed assets: USDC, USDT, ETH, SOL, BTC. Allowed chain values: Arc Testnet, Ethereum, Arbitrum, Base, Solana, unknown. Use unknown when not explicitly clear.",
+      "Sonus currently supports only native USDC transfers on Arc Testnet. Other assets and chains may be discussed or drafted but must never be represented as executable.",
+      "Full portfolio balances, swaps, bridges, staking, and external identity resolution are not connected. Sonus is investigating an Arc/Circle first-party swap path, but a supported public same-chain swap API has not been verified; do not claim a provider is selected, a quote exists, or a route is available. Never silently use a third-party swap provider. For market requests, the server may append a live CoinGecko price snapshot only when the provider responds successfully.",
+      "Do not ask for seed phrases, private keys, or wallet passwords. Keep answers clear and concise.",
+      "Return only one valid JSON object matching this schema: " + JSON.stringify(schema)
+    ].join("\\n");
+    const chatMessages = [
+      { role: "system", content: instructions },
+      ...history.map(item => ({ role: item.role, content: item.content })),
+      { role: "user", content: message }
+    ];
+    const requestBody = (strictSchema: boolean) => ({
+      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      messages: chatMessages,
+      ...(strictSchema ? {
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "sonus_assistant_response", strict: true, schema }
+        }
+      } : { response_format: { type: "json_object" } }),
+      max_tokens: 900,
+      temperature: 0.2
     });
+    const makeRequest = (strictSchema: boolean) => fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+      signal: AbortSignal.timeout(25000),
+      body: JSON.stringify(requestBody(strictSchema))
+    });
+    let upstream = await makeRequest(true);
+    if (!upstream.ok && [400, 404, 422].includes(upstream.status)) {
+      const detail = await upstream.text();
+      console.warn("Sonus provider rejected strict JSON schema; retrying JSON mode", upstream.status, detail.slice(0, 250));
+      upstream = await makeRequest(false);
+    }
     if (!upstream.ok) {
       const detail = await upstream.text();
       console.error("Sonus assistant provider error", upstream.status, detail.slice(0, 500));
-      return NextResponse.json({ error: upstream.status === 401 ? "AI provider key was rejected. Check OPENAI_API_KEY." : "AI provider request failed. Check server logs and provider availability." }, { status: 502 });
+      const message = upstream.status === 401
+        ? "AI provider key was rejected. Check OPENAI_API_KEY."
+        : upstream.status === 404
+          ? "AI endpoint was not found. Check OPENAI_BASE_URL; use the provider's OpenAI-compatible /v1 base URL."
+          : "AI provider request failed. Check OPENAI_BASE_URL, OPENAI_MODEL, the server key, and provider availability.";
+      return NextResponse.json({ error: message }, { status: 502 });
     }
-    const result = await upstream.json() as { output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
-    const outputText = result.output?.flatMap(item => item.content ?? []).find(item => item.type === "output_text")?.text;
-    if (!outputText) throw new Error("No structured output was returned.");
-    const parsed = bindIntentToUserText(validateOutput(JSON.parse(outputText)), message);
+    const result = await upstream.json() as {
+      choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> | null } }>;
+      error?: { message?: string };
+    };
+    const rawContent = result.choices?.[0]?.message?.content;
+    const outputText = typeof rawContent === "string"
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent.map(part => part.text || "").join("\\n")
+        : "";
+    if (!outputText) throw new Error(result.error?.message || "No assistant content was returned.");
+    const jsonText = outputText.trim().replace(/^\`\`\`(?:json)?\\s*/i, "").replace(/\\s*\`\`\`$/, "");
+    const parsed = bindIntentToUserText(validateOutput(JSON.parse(jsonText)), message);
     if (parsed.intent.action === "market") {
       const marketSummary = await getLiveMarketSummary();
       if (marketSummary) parsed.reply = marketSummary;
