@@ -2,7 +2,7 @@
 
 import "./workspace.css";
 import { parseContactImport } from "@/lib/contact-import.mjs";
-import { isHypotheticalPaymentQuestion } from "@/lib/payment-intent.mjs";
+import { isNonActionablePaymentText } from "@/lib/payment-intent.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -53,10 +53,10 @@ const starters = [
 
 function buildReply(input: string): { reply: string; intent?: Intent } {
   const text = input.trim();
-  const isHypothetical = isHypotheticalPaymentQuestion(text);
+  const isHypothetical = isNonActionablePaymentText(text);
   const send = !isHypothetical && /\b(send|pay|transfer)\b/i.test(text);
   if (isHypothetical) {
-    return { reply: "I can help you assess the risks, but I will not turn a question or hypothetical into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset." };
+    return { reply: "I can help you assess the risks, but I will not turn advisory, hypothetical, or negative wording into a payment draft. If you decide to pay, make a separate explicit request and review the recipient, network, amount, and asset." };
   }
   if (send) {
     const amountMatch = text.match(/(?:\$\s*)?((?:\d+(?:\.\d+)?|\.\d+))\s*(usdc|usdt|eth|sol|usd)?/i);
