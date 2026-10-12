@@ -113,6 +113,13 @@ export default function SonusWorkspace() {
   const voiceReplyEnabled = useRef(false);
   const voiceRestartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceSubmitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimePeer = useRef<RTCPeerConnection | null>(null);
+  const realtimeStream = useRef<MediaStream | null>(null);
+  const realtimeChannel = useRef<RTCDataChannel | null>(null);
+  const realtimeAudio = useRef<HTMLAudioElement | null>(null);
+  const realtimeMode = useRef(false);
+  const realtimeAssistantAudioText = useRef("");
+  const realtimeAssistantPlainText = useRef("");
   const [speaking, setSpeaking] = useState(false);
   const paymentSubmissionLock = useRef(false);
 
@@ -123,6 +130,7 @@ export default function SonusWorkspace() {
       if (voiceRestartTimer.current) clearTimeout(voiceRestartTimer.current);
       if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
       recognition.current?.stop();
+      stopRealtimeVoice();
       if (typeof window !== "undefined") window.speechSynthesis?.cancel();
     };
   }, []);
@@ -867,7 +875,161 @@ export default function SonusWorkspace() {
     }
   }
 
-  function startVoice() {
+  function stopRealtimeVoice() {
+    realtimeMode.current = false;
+    realtimeChannel.current?.close();
+    realtimePeer.current?.close();
+    realtimeStream.current?.getTracks().forEach(track => track.stop());
+    if (realtimeAudio.current) {
+      realtimeAudio.current.pause();
+      realtimeAudio.current.srcObject = null;
+    }
+    realtimeChannel.current = null;
+    realtimePeer.current = null;
+    realtimeStream.current = null;
+    realtimeAudio.current = null;
+    realtimeAssistantAudioText.current = "";
+    realtimeAssistantPlainText.current = "";
+  }
+
+  async function prepareRealtimePaymentDraft(transcript: string) {
+    if (!/\\b(?:send|pay|transfer)\\b/i.test(transcript)) return;
+    try {
+      const response = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: transcript, history: messages.slice(-8).map(message => ({ role: message.role, content: message.text })) })
+      });
+      const data = await response.json() as {
+        intent?: { action?: string; amount?: string | null; asset?: string | null; recipient?: string | null; chain?: string | null; purpose?: string | null; needsClarification?: boolean; clarificationQuestion?: string | null };
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "Could not prepare a payment draft.");
+      const parsed = data.intent;
+      if (parsed?.action !== "transfer") return;
+      if (parsed.amount && parsed.recipient && parsed.asset && SUPPORTED_DRAFT_ASSETS.has(parsed.asset.toUpperCase())) {
+        const resolvedRecipient = resolveSavedRecipient(parsed.recipient);
+        setIntent({
+          recipient: resolvedRecipient,
+          amount: parsed.amount,
+          asset: parsed.asset.toUpperCase(),
+          network: parsed.chain === "Arc Testnet" ? "Arc Testnet" : "Choose network",
+          reason: parsed.purpose || "Not specified"
+        });
+        setPaymentTx(null);
+        setNotice("Voice request prepared a payment draft. Review the recipient, asset, network, and amount before approving anything.");
+      } else {
+        setNotice(parsed.clarificationQuestion || "I heard a possible payment request, but the draft needs more details. Check the chat before continuing.");
+      }
+    } catch (error) {
+      setNotice("I heard your payment request, but couldn't prepare its draft: " + (error instanceof Error ? error.message : "assistant unavailable"));
+    }
+  }
+
+  async function startRealtimeVoice() {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") {
+        throw new Error("This browser does not support WebRTC microphone access.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!voiceConversationEnabled.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      const peer = new RTCPeerConnection();
+      realtimePeer.current = peer;
+      realtimeStream.current = stream;
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      peer.ontrack = event => {
+        const audio = new Audio();
+        audio.autoplay = true;
+        audio.srcObject = event.streams[0];
+        realtimeAudio.current = audio;
+        void audio.play().catch(() => setNotice("Voice is connected, but browser audio playback was blocked. Check the tab's sound settings."));
+      };
+      peer.onconnectionstatechange = () => {
+        if (peer.connectionState === "failed" && voiceConversationEnabled.current) {
+          setNotice("Realtime voice connection dropped. Tap the microphone to reconnect.");
+          setListening(false);
+        }
+      };
+      const channel = peer.createDataChannel("oai-events");
+      realtimeChannel.current = channel;
+      channel.onopen = () => {
+        if (!voiceConversationEnabled.current) return;
+        realtimeMode.current = true;
+        setListening(true);
+        setNotice("Realtime voice connected. Speak naturally and interrupt when you need to.");
+      };
+      channel.onmessage = event => {
+        let payload: { type?: string; transcript?: string; delta?: string; error?: { message?: string } };
+        try { payload = JSON.parse(String(event.data)); } catch { return; }
+        if (payload.type === "conversation.item.input_audio_transcription.completed" && payload.transcript?.trim()) {
+          const transcript = payload.transcript.trim();
+          setMessages(current => [...current, { role: "user", text: transcript }]);
+          void prepareRealtimePaymentDraft(transcript);
+        } else if (payload.type === "response.output_audio_transcript.delta" && payload.delta) {
+          realtimeAssistantAudioText.current += payload.delta;
+        } else if (payload.type === "response.output_audio_transcript.done" && payload.transcript) {
+          realtimeAssistantAudioText.current = payload.transcript;
+        } else if (payload.type === "response.output_text.delta" && payload.delta) {
+          realtimeAssistantPlainText.current += payload.delta;
+        } else if (payload.type === "response.created") {
+          setSpeaking(true);
+        } else if (payload.type === "input_audio_buffer.speech_started") {
+          setSpeaking(false);
+        } else if (payload.type === "response.done") {
+          setSpeaking(false);
+          const assistantText = (realtimeAssistantAudioText.current || realtimeAssistantPlainText.current).trim();
+          if (assistantText) setMessages(current => [...current, { role: "assistant", text: assistantText }]);
+          realtimeAssistantAudioText.current = "";
+          realtimeAssistantPlainText.current = "";
+        } else if (payload.type === "error") {
+          setNotice(payload.error?.message || "Realtime voice reported an error. Try reconnecting.");
+        }
+      };
+
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      await new Promise<void>(resolve => {
+        if (peer.iceGatheringState === "complete") return resolve();
+        const onGathering = () => {
+          if (peer.iceGatheringState === "complete") {
+            peer.removeEventListener("icegatheringstatechange", onGathering);
+            resolve();
+          }
+        };
+        peer.addEventListener("icegatheringstatechange", onGathering);
+        setTimeout(() => {
+          peer.removeEventListener("icegatheringstatechange", onGathering);
+          resolve();
+        }, 1800);
+      });
+      if (!voiceConversationEnabled.current) {
+        stopRealtimeVoice();
+        return;
+      }
+      const response = await fetch("/api/voice/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: peer.localDescription?.sdp || offer.sdp
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(errorData.error || "Realtime voice session could not start.");
+      }
+      const answer = await response.text();
+      await peer.setRemoteDescription({ type: "answer", sdp: answer });
+      if (!voiceConversationEnabled.current) stopRealtimeVoice();
+    } catch (error) {
+      stopRealtimeVoice();
+      if (!voiceConversationEnabled.current) return;
+      setNotice("Realtime voice unavailable: " + (error instanceof Error ? error.message : "connection failed") + " Switching to browser voice.");
+      beginVoiceCapture();
+    }
+  }
+
+  async function startVoice() {
     if (typeof window === "undefined") return;
     if (voiceConversationEnabled.current) {
       voiceConversationEnabled.current = false;
@@ -876,6 +1038,7 @@ export default function SonusWorkspace() {
       if (voiceSubmitTimer.current) clearTimeout(voiceSubmitTimer.current);
       recognition.current?.stop();
       window.speechSynthesis?.cancel();
+      stopRealtimeVoice();
       setListening(false);
       setSpeaking(false);
       setNotice("Voice conversation ended.");
@@ -884,7 +1047,18 @@ export default function SonusWorkspace() {
     voiceConversationEnabled.current = true;
     voiceReplyEnabled.current = true;
     window.speechSynthesis?.cancel();
-    beginVoiceCapture();
+    try {
+      const response = await fetch("/api/voice/session", { cache: "no-store" });
+      const capability = await response.json() as { enabled?: boolean };
+      if (!voiceConversationEnabled.current) return;
+      if (capability.enabled) {
+        await startRealtimeVoice();
+        return;
+      }
+    } catch {
+      // The browser voice path remains available if the realtime capability check fails.
+    }
+    if (voiceConversationEnabled.current) beginVoiceCapture();
   }
 
   function navigate(label: string) {
