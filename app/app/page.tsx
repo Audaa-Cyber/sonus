@@ -856,9 +856,10 @@ export default function SonusWorkspace() {
       if (data.mode === "fallback") setNotice("Sonus is running in limited mode because its AI connection is not configured. Add a valid AI provider key to enable natural conversation.");
     } catch (error) {
       console.error("Sonus assistant request failed", error);
+      let health: { configured?: boolean; provider?: string; model?: string } | null = null;
+      try { const status = await fetch("/api/assistant", { cache: "no-store" }); health = await status.json(); } catch { /* status check is best-effort */ }
       appendAssistantReply("Sorry, I couldn’t reach my assistant service just now. Please try again in a moment.");
-      setNotice("Sonus couldn’t connect to its AI service. Check the provider key, model, and API URL in your server settings.");
-    } finally {
+      setNotice(health?.configured ? "Sonus couldn’t connect to " + (health.provider || "the AI provider") + " using " + (health.model || "the configured model") + ". Check the server AI settings." : "No AI provider key is configured on the server. Add it to your deployment environment and restart.");
       setAssistantBusy(false);
     }
   }
