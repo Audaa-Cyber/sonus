@@ -3,13 +3,13 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "SONUS — Money, understood.",
-  description: "A more human way to understand and authorize digital payments.",
+  title: "SONUS — Payments that understand you.",
+  description: "Speak naturally. Understand recipients, context, and payments before you authorize.",
   applicationName: "Sonus",
   keywords: ["Sonus", "payment intelligence", "stablecoin payments", "voice payments"],
   openGraph: {
     title: "SONUS — Money, understood.",
-    description: "Speak naturally. See what happens. Stay in control.",
+    description: "Payment intelligence that keeps you in control.",
     type: "website",
   },
 };
