@@ -27,6 +27,7 @@ const capabilities = [
 export default function Home() {
   return (
     <main className="site-shell" id="top">
+      <FernCaveScene />
       <header className="site-header">
         <a className="brand-lockup" href="#top" aria-label="Sonus home">
           <span className="sonus-symbol" aria-hidden="true"><i /><i /><i /></span>
@@ -53,7 +54,6 @@ export default function Home() {
       </header>
 
       <section className="hero-section" aria-labelledby="hero-title">
-        <FernCaveScene />
         <div className="hero-content">
           <p className="eyebrow"><span className="eyebrow-dot" /> SONUS · PAYMENT INTELLIGENCE</p>
           <h1 id="hero-title">Payments that<br /><em>understand you.</em></h1>
