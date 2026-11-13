@@ -10,7 +10,7 @@ import {
   Wallet,
   Waypoints,
 } from "lucide-react";
-import DarkGradientBg from "@/components/ui/elegant-dark-pattern";
+import FernCaveScene from "@/components/fern-cave-scene";
 
 const steps = [
   { number: "01", title: "Describe it", detail: "Say what you need in plain language." },
@@ -53,7 +53,7 @@ export default function Home() {
       </header>
 
       <section className="hero-section" aria-labelledby="hero-title">
-        <div className="hero-background" aria-hidden="true" />
+        <FernCaveScene />
         <div className="hero-content">
           <p className="eyebrow"><span className="eyebrow-dot" /> SONUS · PAYMENT INTELLIGENCE</p>
           <h1 id="hero-title">Payments that<br /><em>understand you.</em></h1>
