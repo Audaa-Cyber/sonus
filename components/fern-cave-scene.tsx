@@ -158,7 +158,8 @@ export default function FernCaveScene() {
       frame=requestAnimationFrame(animate);
       const dt=Math.min(.05,(time-last)/1000||.016);last=time;
       pointerX+=(targetX-pointerX)*.035;pointerY+=(targetY-pointerY)*.035;
-      const auto= reduced?0:time*.00045;
+      hoverEase+=(hover-hoverEase)*.045;
+      const auto=reduced?0:time*.00045*(1-hoverEase);
       const travel=wheelDistance+auto;
       camera.position.z=5.5-travel;
       camera.position.x=pointerX*.48;
