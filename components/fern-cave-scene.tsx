@@ -103,7 +103,7 @@ export default function FernCaveScene() {
     const loader=new THREE.TextureLoader();
     loader.load("/fern-cave.webp",(texture)=>{
       texture.colorSpace=THREE.SRGBColorSpace;
-      const plate=new THREE.Mesh(new THREE.PlaneGeometry(100,56),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide}));
+      const plate=new THREE.Mesh(new THREE.PlaneGeometry(160,90),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide}));
       plate.position.set(0,4,-102); scene.add(plate);
     },undefined,()=>{host.style.backgroundImage="url('/fern-cave.webp')";host.style.backgroundSize="cover";host.style.backgroundPosition="center";});
 
