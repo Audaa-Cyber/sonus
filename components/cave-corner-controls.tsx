@@ -15,7 +15,7 @@ export default function CaveCornerControls() {
     return () => {
       const current = audio.current;
       if (!current) return;
-      try { current.source.stop(); } catch {}
+      try { current.source.stop(); } catch { /* The source may already be stopped during teardown. */ }
       void current.context.close();
       audio.current = null;
     };
