@@ -236,9 +236,10 @@ export default function FernCaveScene() {
         flowerDummy.position.set(worldX+repel*.2,worldY+repel*.1,flowerZ);
         flowerDummy.scale.setScalar(scale*(1+disperse*.5));flowerDummy.updateMatrix();centers.setMatrixAt(i,flowerDummy.matrix);
         // Keep stems and leaves attached as the blossoms sway and disperse.
-        flowerDummy.position.set(worldX,worldY-.22*scale,flowerZ);
+        const stemLength=Math.max(.08,worldY+1.18);
+        flowerDummy.position.set(worldX,(worldY-1.18)*.5,flowerZ);
         flowerDummy.rotation.set(0,sway,disperse*Math.sin(time*.001+f.phase)*.35);
-        flowerDummy.scale.setScalar(scale*(1+disperse*.25));flowerDummy.updateMatrix();stems.setMatrixAt(i,flowerDummy.matrix);
+        flowerDummy.scale.set(scale,stemLength/.42,scale);flowerDummy.updateMatrix();stems.setMatrixAt(i,flowerDummy.matrix);
         for(let k=0;k<2;k++){
           flowerDummy.position.set(worldX+f.side*(.18+k*.13),worldY-.12,flowerZ+.12-k*.18);
           flowerDummy.rotation.set(.2,f.side*.5+k*.5+sway,.5*f.side+disperse*.3);
