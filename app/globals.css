@@ -503,3 +503,11 @@ html,body{background:#080706;color:#f5efe2}
 @keyframes fern-ui-reveal{from{opacity:0}to{opacity:1}}
 .site-shell>*:not(.fern-cave-scene):not(.fern-scene-loader),.ws-root>*:not(.fern-cave-scene):not(.fern-scene-loader){animation:fern-ui-reveal 1.6s ease .2s both}
 @media(prefers-reduced-motion:reduce){.site-shell>*:not(.fern-cave-scene):not(.fern-scene-loader),.ws-root>*:not(.fern-cave-scene):not(.fern-scene-loader){animation:none}}
+
+.site-header{min-height:82px;border-bottom:0;background:linear-gradient(180deg,rgba(0,0,0,.24),transparent)}
+.brand-name{font-family:'Manrope',Arial,sans-serif;font-size:20px;font-weight:500;letter-spacing:-.02em}
+.main-nav{gap:clamp(24px,2.75vw,44px)}
+.main-nav a{font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+.header-link{min-height:46px;padding:0 26px;border-radius:999px;background:#f5efe2;color:#151510;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;transition:transform .25s,background .25s}
+.header-link:hover{background:#e5c99e;color:#151510;transform:translateY(-1px)}
+@media(max-width:820px){.site-header{min-height:70px;padding:0 18px}.brand-name{font-size:18px}.header-link{min-height:40px;padding:0 18px;font-size:10px}}
