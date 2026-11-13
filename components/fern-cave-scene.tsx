@@ -2,6 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
 type Flower = { x:number; y:number; z:number; scale:number; phase:number; side:number };
 
@@ -30,6 +33,9 @@ export default function FernCaveScene() {
     renderer.domElement.className = "fern-cave-webgl";
     renderer.domElement.setAttribute("aria-hidden","true");
     host.appendChild(renderer.domElement);
+    const composer=new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene,camera));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(1,1),mobile?.42:.68,.45,.82));
 
     const ambient = new THREE.HemisphereLight(0x9a8c83, 0x17100b, 1.05);
     scene.add(ambient);
@@ -159,7 +165,7 @@ export default function FernCaveScene() {
     window.addEventListener("touchmove",onTouchMove,{passive:true});
     const ctas=Array.from(document.querySelectorAll(".hero-actions .primary-link,.ws-send-payment-btn,.ws-connect-btn"));
     ctas.forEach((cta)=>{cta.addEventListener("pointerenter",onEnter);cta.addEventListener("pointerleave",onLeave);});
-    const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);};
+    const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);composer.setSize(w,h);};
     const observer=new ResizeObserver(resize);observer.observe(host);resize();
 
     const animate=(time:number)=>{
@@ -220,7 +226,7 @@ export default function FernCaveScene() {
       petals.instanceMatrix.needsUpdate=true;centers.instanceMatrix.needsUpdate=true;stems.instanceMatrix.needsUpdate=true;leaves.instanceMatrix.needsUpdate=true;
       petalMat.emissiveIntensity=.48+cursorGlow*.9;centerMat.emissiveIntensity=1.5+cursorGlow*2;
       if(!reduced){dust.rotation.y=Math.sin(time*.00012)*.04;dust.position.y=Math.sin(time*.0003)*.08;}
-      renderer.render(scene,camera);
+      composer.render();
     };
     frame=requestAnimationFrame(animate);
     return ()=>{
@@ -230,7 +236,7 @@ export default function FernCaveScene() {
       window.removeEventListener("touchmove",onTouchMove);
       ctas.forEach((cta)=>{cta.removeEventListener("pointerenter",onEnter);cta.removeEventListener("pointerleave",onLeave);});
       scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){o.geometry.dispose();const materials=Array.isArray(o.material)?o.material:[o.material];materials.forEach(material=>{const textured=material as THREE.Material & {map?:THREE.Texture};textured.map?.dispose();material.dispose();});}});
-      renderer.dispose();renderer.domElement.remove();
+      composer.dispose();renderer.dispose();renderer.domElement.remove();
     };
   },[]);
 
