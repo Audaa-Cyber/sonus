@@ -248,7 +248,7 @@ export default function FernCaveScene() {
       window.removeEventListener("touchstart",onTouchStart);
       window.removeEventListener("touchmove",onTouchMove);
       ctas.forEach((cta)=>{cta.removeEventListener("pointerenter",onEnter);cta.removeEventListener("pointerleave",onLeave);});
-      scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){o.geometry.dispose();const materials=Array.isArray(o.material)?o.material:[o.material];materials.forEach(material=>{const textured=material as THREE.Material & {map?:THREE.Texture};textured.map?.dispose();material.dispose();});}});
+      scene.traverse(object=>{if(object instanceof THREE.Mesh||object instanceof THREE.Points){const renderable=object as THREE.Mesh|THREE.Points;renderable.geometry.dispose();const materials=Array.isArray(renderable.material)?renderable.material:[renderable.material];materials.forEach(material=>{const textured=material as THREE.Material & {map?:THREE.Texture};textured.map?.dispose();material.dispose();});}});
       composer.dispose();renderer.dispose();renderer.domElement.remove();
     };
   },[]);
