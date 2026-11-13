@@ -18,7 +18,9 @@ export default function FernCaveScene() {
     scene.fog = new THREE.FogExp2(0x100b08, mobile ? .025 : .018);
     const camera = new THREE.PerspectiveCamera(mobile ? 68 : 62, 1, .1, 180);
     camera.position.set(0, .15, 5.5);
-    const renderer = new THREE.WebGLRenderer({ antialias: !mobile, alpha: false, powerPreference: "high-performance" });
+    let renderer: THREE.WebGLRenderer;
+    try { renderer = new THREE.WebGLRenderer({ antialias: !mobile, alpha: false, powerPreference: "high-performance" }); }
+    catch { host.style.backgroundImage = "url('/fern-cave.webp')"; host.style.backgroundSize = "cover"; host.style.backgroundPosition = "center"; return; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.35 : 1.8));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -93,7 +95,10 @@ export default function FernCaveScene() {
     const centerGeo=new THREE.SphereGeometry(.065,7,6);
     const centerMat=new THREE.MeshStandardMaterial({color:0xffdca0,emissive:0xd18b37,emissiveIntensity:1.5});
     const centers=new THREE.InstancedMesh(centerGeo,centerMat,flowerCount);
-    const stemGeo=new THREE.CylinderGeometry(.018,.035,.42,5);\n    const stemMat=new THREE.MeshStandardMaterial({color:0x40583a,roughness:.95});\n    const stems=new THREE.InstancedMesh(stemGeo,stemMat,flowerCount);\n    const leafGeo=new THREE.SphereGeometry(.13,6,5); leafGeo.scale(.45,.12,1.7);
+    const stemGeo=new THREE.CylinderGeometry(.018,.035,.42,5);
+    const stemMat=new THREE.MeshStandardMaterial({color:0x40583a,roughness:.95});
+    const stems=new THREE.InstancedMesh(stemGeo,stemMat,flowerCount);
+    const leafGeo=new THREE.SphereGeometry(.13,6,5); leafGeo.scale(.45,.12,1.7);
     const leafMat=new THREE.MeshStandardMaterial({color:0x526c42,roughness:.9});
     const leaves=new THREE.InstancedMesh(leafGeo,leafMat,flowerCount*2);
     const flowerDummy=new THREE.Object3D();
@@ -110,7 +115,8 @@ export default function FernCaveScene() {
         flowerDummy.rotation.set(0,-a,0); flowerDummy.scale.setScalar(scale);
         flowerDummy.updateMatrix(); petals.setMatrixAt(i*5+k,flowerDummy.matrix);
       }
-      flowerDummy.position.set(x,y,z); flowerDummy.scale.setScalar(scale); flowerDummy.updateMatrix(); centers.setMatrixAt(i,flowerDummy.matrix);\n      flowerDummy.position.set(x,y-.22*scale,z);flowerDummy.scale.setScalar(scale);flowerDummy.updateMatrix();stems.setMatrixAt(i,flowerDummy.matrix);
+      flowerDummy.position.set(x,y,z); flowerDummy.scale.setScalar(scale); flowerDummy.updateMatrix(); centers.setMatrixAt(i,flowerDummy.matrix);
+      flowerDummy.position.set(x,y-.22*scale,z);flowerDummy.scale.setScalar(scale);flowerDummy.updateMatrix();stems.setMatrixAt(i,flowerDummy.matrix);
       for(let k=0;k<2;k++){
         flowerDummy.position.set(x+side*(.18+k*.13),y-.12,z+.12-k*.18);
         flowerDummy.rotation.set(.2,side*.5+k*.5,.5*side); flowerDummy.scale.setScalar(scale);
@@ -148,7 +154,9 @@ export default function FernCaveScene() {
     const onTouchMove=(e:TouchEvent)=>{const y=e.touches[0]?.clientY??touchY;wheelDistance=Math.min(58,Math.max(-4,wheelDistance+(touchY-y)*.11));touchY=y;};
     const onEnter=()=>{hover=1;}; const onLeave=()=>{hover=0;};
     window.addEventListener("pointermove",onPointer,{passive:true});
-    window.addEventListener("wheel",onWheel,{passive:true});\n    window.addEventListener("touchstart",onTouchStart,{passive:true});\n    window.addEventListener("touchmove",onTouchMove,{passive:true});
+    window.addEventListener("wheel",onWheel,{passive:true});
+    window.addEventListener("touchstart",onTouchStart,{passive:true});
+    window.addEventListener("touchmove",onTouchMove,{passive:true});
     const ctas=Array.from(document.querySelectorAll(".hero-actions .primary-link,.ws-send-payment-btn,.ws-connect-btn"));
     ctas.forEach((cta)=>{cta.addEventListener("pointerenter",onEnter);cta.addEventListener("pointerleave",onLeave);});
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);};
@@ -195,7 +203,9 @@ export default function FernCaveScene() {
     if(!reduced)frame=requestAnimationFrame(animate);else renderer.render(scene,camera);
     return ()=>{
       cancelAnimationFrame(frame);observer.disconnect();
-      window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);\n      window.removeEventListener("touchstart",onTouchStart);\n      window.removeEventListener("touchmove",onTouchMove);
+      window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);
+      window.removeEventListener("touchstart",onTouchStart);
+      window.removeEventListener("touchmove",onTouchMove);
       ctas.forEach((cta)=>{cta.removeEventListener("pointerenter",onEnter);cta.removeEventListener("pointerleave",onLeave);});
       scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){o.geometry.dispose();const m=o.material;if(Array.isArray(m))m.forEach(x=>x.dispose());else m.dispose();}});
       renderer.dispose();renderer.domElement.remove();
