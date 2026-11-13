@@ -255,7 +255,9 @@ export default function FernCaveScene() {
       if(!reduced){dust.rotation.y=Math.sin(time*.00012)*.04;dust.position.y=Math.sin(time*.0003)*.08;}
       composer.render();
     };
-    if(!reduced)frame=requestAnimationFrame(animate);else composer.render();
+    // Keep the render loop alive even with reduced motion so the scene still renders,
+    // responds to explicit navigation input, and resizes correctly. Only ambient motion is reduced.
+    frame=requestAnimationFrame(animate);
     return ()=>{
       disposed=true;
       cancelAnimationFrame(frame);observer.disconnect();
