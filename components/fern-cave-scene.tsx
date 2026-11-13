@@ -202,6 +202,7 @@ export default function FernCaveScene() {
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);composer.setSize(w,h);};
     const observer=new ResizeObserver(resize);observer.observe(host);resize();
 
+    const projectedFlower=new THREE.Vector3();
     const animate=(time:number)=>{
       if(!document.hidden) frame=requestAnimationFrame(animate);
       pointerX+=(targetX-pointerX)*.035;pointerY+=(targetY-pointerY)*.035;
@@ -225,9 +226,9 @@ export default function FernCaveScene() {
         const sway=reduced?0:Math.sin(time*.0011+f.phase)*.06;
         let worldX=f.x+sway+pointerX*(.1+near*.22)*-1;
         const worldZ=f.z;
-        const projected=new THREE.Vector3(worldX,f.y,worldZ).project(camera);
-        const screenX=(projected.x*.5+.5)*host.clientWidth;
-        const screenY=(-projected.y*.5+.5)*host.clientHeight;
+        projectedFlower.set(worldX,f.y,worldZ).project(camera);
+        const screenX=(projectedFlower.x*.5+.5)*host.clientWidth;
+        const screenY=(-projectedFlower.y*.5+.5)*host.clientHeight;
         const cursorDX=screenX-(targetX*.5+.5)*host.clientWidth;
         const cursorDY=screenY-(targetY*.5+.5)*host.clientHeight;
         const cursorDistance=Math.hypot(cursorDX,cursorDY);
