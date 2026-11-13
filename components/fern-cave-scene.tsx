@@ -93,7 +93,7 @@ export default function FernCaveScene() {
     const centerGeo=new THREE.SphereGeometry(.065,7,6);
     const centerMat=new THREE.MeshStandardMaterial({color:0xffdca0,emissive:0xd18b37,emissiveIntensity:1.5});
     const centers=new THREE.InstancedMesh(centerGeo,centerMat,flowerCount);
-    const leafGeo=new THREE.SphereGeometry(.13,6,5); leafGeo.scale(.45,.12,1.7);
+    const stemGeo=new THREE.CylinderGeometry(.018,.035,.42,5);\n    const stemMat=new THREE.MeshStandardMaterial({color:0x40583a,roughness:.95});\n    const stems=new THREE.InstancedMesh(stemGeo,stemMat,flowerCount);\n    const leafGeo=new THREE.SphereGeometry(.13,6,5); leafGeo.scale(.45,.12,1.7);
     const leafMat=new THREE.MeshStandardMaterial({color:0x526c42,roughness:.9});
     const leaves=new THREE.InstancedMesh(leafGeo,leafMat,flowerCount*2);
     const flowerDummy=new THREE.Object3D();
@@ -110,14 +110,14 @@ export default function FernCaveScene() {
         flowerDummy.rotation.set(0,-a,0); flowerDummy.scale.setScalar(scale);
         flowerDummy.updateMatrix(); petals.setMatrixAt(i*5+k,flowerDummy.matrix);
       }
-      flowerDummy.position.set(x,y,z); flowerDummy.scale.setScalar(scale); flowerDummy.updateMatrix(); centers.setMatrixAt(i,flowerDummy.matrix);
+      flowerDummy.position.set(x,y,z); flowerDummy.scale.setScalar(scale); flowerDummy.updateMatrix(); centers.setMatrixAt(i,flowerDummy.matrix);\n      flowerDummy.position.set(x,y-.22*scale,z);flowerDummy.scale.setScalar(scale);flowerDummy.updateMatrix();stems.setMatrixAt(i,flowerDummy.matrix);
       for(let k=0;k<2;k++){
         flowerDummy.position.set(x+side*(.18+k*.13),y-.12,z+.12-k*.18);
         flowerDummy.rotation.set(.2,side*.5+k*.5,.5*side); flowerDummy.scale.setScalar(scale);
         flowerDummy.updateMatrix(); leaves.setMatrixAt(i*2+k,flowerDummy.matrix);
       }
     }
-    scene.add(petals,centers,leaves);
+    scene.add(stems,petals,centers,leaves);
 
     // Warm floating dust and pollen.
     const dustCount=mobile?320:900;
@@ -141,12 +141,12 @@ export default function FernCaveScene() {
     }
     scene.add(stones);
 
-    let pointerX=0,pointerY=0,targetX=0,targetY=0,scrollProgress=0,hover=0,frame=0,last=0;
+    let pointerX=0,pointerY=0,targetX=0,targetY=0,wheelDistance=0,hover=0,hoverEase=0,frame=0,last=0,touchY=0;
     const onPointer=(e:PointerEvent)=>{targetX=(e.clientX/innerWidth-.5)*2;targetY=(e.clientY/innerHeight-.5)*2;};
     const onScroll=()=>{scrollProgress=Math.min(1,Math.max(0,window.scrollY/Math.max(1,document.documentElement.scrollHeight-innerHeight)));};
     const onEnter=()=>{hover=1;}; const onLeave=()=>{hover=0;};
     window.addEventListener("pointermove",onPointer,{passive:true});
-    window.addEventListener("scroll",onScroll,{passive:true});
+    window.addEventListener("wheel",onWheel,{passive:true});\n    window.addEventListener("touchstart",onTouchStart,{passive:true});\n    window.addEventListener("touchmove",onTouchMove,{passive:true});
     const cta=document.querySelector(".hero-actions .primary-link");
     cta?.addEventListener("pointerenter",onEnter); cta?.addEventListener("pointerleave",onLeave);
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);};
@@ -166,7 +166,7 @@ export default function FernCaveScene() {
       camera.rotation.z=-pointerX*.012;
       warm.intensity=145+Math.sin(time*.0007)*12;
       fill.intensity=35+Math.sin(time*.0009+1)*8;
-      const disperse=hover?1:0;
+      const disperse=hoverEase;
       for(let i=0;i<flowerCount;i++){
         const f=flowers[i],near=Math.max(0,1-Math.abs(f.z-camera.position.z)/8);
         const sway=reduced?0:Math.sin(time*.0011+f.phase)*.06;
@@ -185,14 +185,14 @@ export default function FernCaveScene() {
         flowerDummy.position.set(worldX+repel*.2,f.y+repel*.1,worldZ);
         flowerDummy.scale.setScalar(scale*(1+disperse*.5));flowerDummy.updateMatrix();centers.setMatrixAt(i,flowerDummy.matrix);
       }
-      petals.instanceMatrix.needsUpdate=true;centers.instanceMatrix.needsUpdate=true;
+      petals.instanceMatrix.needsUpdate=true;centers.instanceMatrix.needsUpdate=true;stems.instanceMatrix.needsUpdate=true;
       if(!reduced){dust.rotation.y=Math.sin(time*.00012)*.04;dust.position.y=Math.sin(time*.0003)*.08;}
       renderer.render(scene,camera);
     };
     if(!reduced)frame=requestAnimationFrame(animate);else renderer.render(scene,camera);
     return ()=>{
       cancelAnimationFrame(frame);observer.disconnect();
-      window.removeEventListener("pointermove",onPointer);window.removeEventListener("scroll",onScroll);
+      window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);\n      window.removeEventListener("touchstart",onTouchStart);\n      window.removeEventListener("touchmove",onTouchMove);
       cta?.removeEventListener("pointerenter",onEnter);cta?.removeEventListener("pointerleave",onLeave);
       scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){o.geometry.dispose();const m=o.material;if(Array.isArray(m))m.forEach(x=>x.dispose());else m.dispose();}});
       renderer.dispose();renderer.domElement.remove();
