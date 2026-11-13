@@ -250,7 +250,7 @@ export default function FernCaveScene() {
       if(!reduced){dust.rotation.y=Math.sin(time*.00012)*.04;dust.position.y=Math.sin(time*.0003)*.08;}
       composer.render();
     };
-    frame=requestAnimationFrame(animate);
+    if(!reduced)frame=requestAnimationFrame(animate);else composer.render();
     return ()=>{
       cancelAnimationFrame(frame);observer.disconnect();
       window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);
