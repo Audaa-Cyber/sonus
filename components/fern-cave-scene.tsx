@@ -82,8 +82,8 @@ export default function FernCaveScene() {
     const loader=new THREE.TextureLoader();
     loader.load("/fern-cave.webp",(texture)=>{
       texture.colorSpace=THREE.SRGBColorSpace;
-      const plate=new THREE.Mesh(new THREE.PlaneGeometry(27,15.1),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.8,depthWrite:false}));
-      plate.position.set(0,3.8,-96); scene.add(plate);
+      const plate=new THREE.Mesh(new THREE.PlaneGeometry(100,56),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide}));
+      plate.position.set(0,4,-102); scene.add(plate);
     });
 
     // Hundreds of instanced blossoms. Petals and centers sway and react to cursor proximity.
@@ -207,7 +207,7 @@ export default function FernCaveScene() {
       window.removeEventListener("touchstart",onTouchStart);
       window.removeEventListener("touchmove",onTouchMove);
       ctas.forEach((cta)=>{cta.removeEventListener("pointerenter",onEnter);cta.removeEventListener("pointerleave",onLeave);});
-      scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){o.geometry.dispose();const m=o.material;if(Array.isArray(m))m.forEach(x=>x.dispose());else m.dispose();}});
+      scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){o.geometry.dispose();const m=o.material;if(Array.isArray(m))m.forEach(x=>{x.map?.dispose();x.dispose();});else {m.map?.dispose();m.dispose();}}});
       renderer.dispose();renderer.domElement.remove();
     };
   },[]);
