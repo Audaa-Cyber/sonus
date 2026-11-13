@@ -205,10 +205,9 @@ export default function FernCaveScene() {
           flowerDummy.rotation.set(0,-a+sway,disperse* Math.sin(time*.001+f.phase)*.8);
           flowerDummy.scale.setScalar(scale*(1+disperse*.6));flowerDummy.updateMatrix();petals.setMatrixAt(i*5+k,flowerDummy.matrix);
         }
-        flowerDummy.position.set(worldX+repel*.2,worldY+repel*.1,worldZ);
+        flowerDummy.position.set(worldX+repel*.2,worldY+repel*.1,flowerZ);
         flowerDummy.scale.setScalar(scale*(1+disperse*.5));flowerDummy.updateMatrix();centers.setMatrixAt(i,flowerDummy.matrix);
-      }
-      // Keep stems and leaves attached as the blossoms sway and disperse.
+        // Keep stems and leaves attached as the blossoms sway and disperse.
         flowerDummy.position.set(worldX,worldY-.22*scale,flowerZ);
         flowerDummy.rotation.set(0,sway,disperse*Math.sin(time*.001+f.phase)*.35);
         flowerDummy.scale.setScalar(scale*(1+disperse*.25));flowerDummy.updateMatrix();stems.setMatrixAt(i,flowerDummy.matrix);
