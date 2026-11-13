@@ -47,7 +47,7 @@ export default function FernCaveScene() {
     rim.position.set(5, 3.2, -48); scene.add(rim);
 
     // A curved, segmented rock tunnel: a real navigable environment, not a flat image.
-    const rockMat = new THREE.MeshStandardMaterial({ color:0x30251e, roughness:.96, metalness:0 });
+    const rockMat = new THREE.MeshStandardMaterial({ color:0x30251e, roughness:.96, metalness:0, side:THREE.DoubleSide });
     const rockDark = new THREE.MeshStandardMaterial({ color:0x17120f, roughness:1 });
     const rockGeo = new THREE.BufferGeometry();
     const verts:number[] = [], indices:number[] = [];
@@ -90,7 +90,7 @@ export default function FernCaveScene() {
       texture.colorSpace=THREE.SRGBColorSpace;
       const plate=new THREE.Mesh(new THREE.PlaneGeometry(100,56),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide}));
       plate.position.set(0,4,-102); scene.add(plate);
-    });
+    },undefined,()=>{host.style.backgroundImage="url('/fern-cave.webp')";host.style.backgroundSize="cover";host.style.backgroundPosition="center";});
 
     // Hundreds of instanced blossoms. Petals and centers sway and react to cursor proximity.
     const flowerCount=mobile?210:560;
