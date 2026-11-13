@@ -176,12 +176,12 @@ export default function FernCaveScene() {
     }
     scene.add(lightBeams);
 
-    let pointerX=0,pointerY=0,targetX=0,targetY=0,wheelDistance=0,hover=0,hoverEase=0,frame=0,last=0,touchY=0;
+    let pointerX=0,pointerY=0,targetX=0,targetY=0,wheelDistance=0,hover=0,hoverEase=0,frame=0,last=0,touchY=0,lastInput=performance.now();
     const onPointer=(e:PointerEvent)=>{targetX=(e.clientX/innerWidth-.5)*2;targetY=(e.clientY/innerHeight-.5)*2;};
-    const onWheel=(e:WheelEvent)=>{wheelDistance=Math.min(58,Math.max(-4,wheelDistance+e.deltaY*.012));};
+    const onWheel=(e:WheelEvent)=>{lastInput=performance.now();wheelDistance=Math.min(58,Math.max(-4,wheelDistance+e.deltaY*.012));};
     const onTouchStart=(e:TouchEvent)=>{touchY=e.touches[0]?.clientY??0;};
-    const onTouchMove=(e:TouchEvent)=>{const y=e.touches[0]?.clientY??touchY;wheelDistance=Math.min(58,Math.max(-4,wheelDistance+(touchY-y)*.11));touchY=y;};
-    const onEnter=()=>{hover=1;}; const onLeave=()=>{hover=0;};
+    const onTouchMove=(e:TouchEvent)=>{lastInput=performance.now();const y=e.touches[0]?.clientY??touchY;wheelDistance=Math.min(58,Math.max(-4,wheelDistance+(touchY-y)*.11));touchY=y;};
+    const onEnter=()=>{lastInput=performance.now();hover=1;}; const onLeave=()=>{lastInput=performance.now();hover=0;};
     window.addEventListener("pointermove",onPointer,{passive:true});
     window.addEventListener("wheel",onWheel,{passive:true});
     window.addEventListener("touchstart",onTouchStart,{passive:true});
