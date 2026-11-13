@@ -8,6 +8,10 @@ on:
     branches:
       - redesign/fern-flower-experience
 
+concurrency:
+  group: sonus-redesign-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
