@@ -177,24 +177,33 @@ export default function FernCaveScene() {
     }
     scene.add(lightBeams);
 
-    let pointerX=0,pointerY=0,targetX=0,targetY=0,wheelDistance=0,hover=0,hoverEase=0,frame=0,last=0,touchY=0,lastInput=performance.now();
-    const onPointer=(e:PointerEvent)=>{targetX=(e.clientX/innerWidth-.5)*2;targetY=(e.clientY/innerHeight-.5)*2;};
-    const onWheel=(e:WheelEvent)=>{lastInput=performance.now();wheelDistance=Math.min(58,Math.max(-4,wheelDistance+e.deltaY*.012));};
+    let pointerX=0,pointerY=0,targetX=0,targetY=0,wheelDistance=0,hover=0,hoverEase=0,frame=0,touchY=0;
+    const onPointer=(e:PointerEvent)=>{targetX=(e.clientX/Math.max(1,window.innerWidth)-.5)*2;targetY=(e.clientY/Math.max(1,window.innerHeight)-.5)*2;};
+    const onWheel=(e:WheelEvent)=>{wheelDistance=Math.min(58,Math.max(-4,wheelDistance+e.deltaY*.006));};
     const onTouchStart=(e:TouchEvent)=>{touchY=e.touches[0]?.clientY??0;};
-    const onTouchMove=(e:TouchEvent)=>{lastInput=performance.now();const y=e.touches[0]?.clientY??touchY;wheelDistance=Math.min(58,Math.max(-4,wheelDistance+(touchY-y)*.11));touchY=y;};
-    const onEnter=()=>{lastInput=performance.now();hover=1;}; const onLeave=()=>{lastInput=performance.now();hover=0;};
+    const onTouchMove=(e:TouchEvent)=>{const y=e.touches[0]?.clientY??touchY;wheelDistance=Math.min(58,Math.max(-4,wheelDistance+(touchY-y)*.065));touchY=y;};
+    const onKeyDown=(e:KeyboardEvent)=>{
+      const target=e.target;
+      if(target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName))) return;
+      const key=e.key.toLowerCase();
+      if(key==="arrowdown"||key==="pagedown"||key==="s"){wheelDistance=Math.min(58,wheelDistance+2.4);if(key.startsWith("arrow")||key.startsWith("page"))e.preventDefault();}
+      if(key==="arrowup"||key==="pageup"||key==="w"){wheelDistance=Math.max(-4,wheelDistance-2.4);if(key.startsWith("arrow")||key.startsWith("page"))e.preventDefault();}
+    };
+    const onVisibility=()=>{if(document.hidden){cancelAnimationFrame(frame);frame=0;}else if(frame===0){frame=requestAnimationFrame(animate);}};
+    const onEnter=()=>{hover=1;}; const onLeave=()=>{hover=0;};
     window.addEventListener("pointermove",onPointer,{passive:true});
     window.addEventListener("wheel",onWheel,{passive:true});
     window.addEventListener("touchstart",onTouchStart,{passive:true});
     window.addEventListener("touchmove",onTouchMove,{passive:true});
+    window.addEventListener("keydown",onKeyDown);
+    document.addEventListener("visibilitychange",onVisibility);
     const ctas=Array.from(document.querySelectorAll(".hero-actions .go,.hero-actions .primary-link,.ws-send-payment-btn,.ws-connect-btn"));
     ctas.forEach((cta)=>{cta.addEventListener("pointerenter",onEnter);cta.addEventListener("pointerleave",onLeave);});
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);composer.setSize(w,h);};
     const observer=new ResizeObserver(resize);observer.observe(host);resize();
 
     const animate=(time:number)=>{
-      frame=requestAnimationFrame(animate);
-      last=time;
+      if(!document.hidden) frame=requestAnimationFrame(animate);
       pointerX+=(targetX-pointerX)*.035;pointerY+=(targetY-pointerY)*.035;
       hoverEase+=(hover-hoverEase)*.045;
       const auto=reduced?0:Math.min(58,time*.00045)*(1-hoverEase);
@@ -257,13 +266,15 @@ export default function FernCaveScene() {
     };
     // Keep the render loop alive even with reduced motion so the scene still renders,
     // responds to explicit navigation input, and resizes correctly. Only ambient motion is reduced.
-    frame=requestAnimationFrame(animate);
+    if(!document.hidden) frame=requestAnimationFrame(animate);
     return ()=>{
       disposed=true;
       cancelAnimationFrame(frame);observer.disconnect();
       window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);
       window.removeEventListener("touchstart",onTouchStart);
       window.removeEventListener("touchmove",onTouchMove);
+      window.removeEventListener("keydown",onKeyDown);
+      document.removeEventListener("visibilitychange",onVisibility);
       ctas.forEach((cta)=>{cta.removeEventListener("pointerenter",onEnter);cta.removeEventListener("pointerleave",onLeave);});
       scene.traverse(object=>{if(object instanceof THREE.Mesh||object instanceof THREE.Points){const renderable=object as THREE.Mesh|THREE.Points;renderable.geometry.dispose();const materials=Array.isArray(renderable.material)?renderable.material:[renderable.material];materials.forEach(material=>{const textured=material as THREE.Material & {map?:THREE.Texture};textured.map?.dispose();material.dispose();});}});
       composer.dispose();renderer.dispose();renderer.domElement.remove();
