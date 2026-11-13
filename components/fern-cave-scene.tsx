@@ -56,12 +56,12 @@ export default function FernCaveScene() {
     const rockDark = new THREE.MeshStandardMaterial({ color:0x17120f, roughness:1 });
     const rockGeo = new THREE.BufferGeometry();
     const verts:number[] = [], indices:number[] = [];
-    const rings=38, around=36, length=100;
+    const rings=58, around=48, length=100;
     for(let j=0;j<=rings;j++){
       const z=8-(j/rings)*length;
       for(let i=0;i<=around;i++){
         const a=(i/around)*Math.PI;
-        const noise=Math.sin(j*1.7+i*.7)*.16+Math.cos(j*.8+i*1.9)*.09;
+        const noise=Math.sin(j*1.7+i*.7)*.32+Math.cos(j*.8+i*1.9)*.2+Math.sin(j*.17+i*.23)*.38;
         const rx=9.1+noise, ry=6.3+noise;
         verts.push(Math.cos(a)*rx, Math.sin(a)*ry-1.15, z);
       }
@@ -89,6 +89,15 @@ export default function FernCaveScene() {
       const s=.3+Math.random()*1.5; dummy.scale.set(s*1.2,s,s); dummy.updateMatrix(); rockInstances.setMatrixAt(i,dummy.matrix);
     }
     scene.add(rockInstances);
+    const stalactiteGeo=new THREE.ConeGeometry(.2,.95,6);
+    const stalactites=new THREE.InstancedMesh(stalactiteGeo,rockMat,mobile?36:72);
+    for(let i=0;i<(mobile?36:72);i++){
+      const x=(Math.random()-.5)*14,z=6-Math.random()*92;
+      const ceilingY=Math.sqrt(Math.max(.5,1-(x*x)/(9.1*9.1)))*6.3-1.15;
+      dummy.position.set(x,ceilingY-.42,z);dummy.rotation.set(0,0,Math.PI+(Math.random()-.5)*.16);
+      const scale=.45+Math.random()*1.15;dummy.scale.set(scale,scale,scale);dummy.updateMatrix();stalactites.setMatrixAt(i,dummy.matrix);
+    }
+    stalactites.castShadow=!mobile;scene.add(stalactites);
 
     // A photograph-backed distant opening keeps the supplied reference image in the scene.
     const loader=new THREE.TextureLoader();
