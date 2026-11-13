@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -10,6 +10,7 @@ type Flower = { x:number; y:number; z:number; scale:number; phase:number; side:n
 
 export default function FernCaveScene() {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [loaded,setLoaded]=useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -23,7 +24,7 @@ export default function FernCaveScene() {
     camera.position.set(0, .15, 5.5);
     let renderer: THREE.WebGLRenderer;
     try { renderer = new THREE.WebGLRenderer({ antialias: !mobile, alpha: false, powerPreference: "high-performance" }); }
-    catch { host.style.backgroundImage = "url('/fern-cave.webp')"; host.style.backgroundSize = "cover"; host.style.backgroundPosition = "center"; return; }
+    catch { host.style.backgroundImage = "url('/fern-cave.webp')"; host.style.backgroundSize = "cover"; host.style.backgroundPosition = "center"; setLoaded(true); return; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.35 : 1.8));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -106,8 +107,8 @@ export default function FernCaveScene() {
       if(disposed){texture.dispose();return;}
       texture.colorSpace=THREE.SRGBColorSpace;
       const plate=new THREE.Mesh(new THREE.PlaneGeometry(160,90),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide}));
-      plate.position.set(0,4,-102); scene.add(plate);
-    },undefined,()=>{host.style.backgroundImage="url('/fern-cave.webp')";host.style.backgroundSize="cover";host.style.backgroundPosition="center";});
+      plate.position.set(0,4,-102); scene.add(plate);setLoaded(true);
+    },undefined,()=>{host.style.backgroundImage="url('/fern-cave.webp')";host.style.backgroundSize="cover";host.style.backgroundPosition="center";setLoaded(true);});
 
     // Hundreds of instanced blossoms. Petals and centers sway and react to cursor proximity.
     const flowerCount=mobile?210:560;
@@ -267,5 +268,5 @@ export default function FernCaveScene() {
     };
   },[]);
 
-  return <div ref={hostRef} className="fern-cave-scene" aria-hidden="true" />;
+  return <div ref={hostRef} className="fern-cave-scene" aria-hidden="true"><div className={`fern-scene-loader${loaded?" gone":""}`}><span /></div></div>;
 }
