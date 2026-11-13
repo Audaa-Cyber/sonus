@@ -202,6 +202,7 @@ export default function FernCaveScene() {
       camera.rotation.y=Math.cos(travel*.045)*.025-pointerX*.055;
       camera.rotation.x=pointerY*.035;
       camera.rotation.z=-pointerX*.012;
+      camera.updateMatrixWorld();
       warm.intensity=145+Math.sin(time*.0007)*12;
       lightBeams.children.forEach((object,i)=>{const beam=object as THREE.Mesh;beam.rotation.y=Math.sin(time*.00022+i)*.035;const material=beam.material as THREE.MeshBasicMaterial;material.opacity=.045+Math.sin(time*.0005+i)*.012;});
       fill.intensity=35+Math.sin(time*.0009+1)*8;
