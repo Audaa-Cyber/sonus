@@ -475,3 +475,19 @@ html,body{background:#080706;color:#f5efe2}
 .site-shell>.groups-section{background:radial-gradient(ellipse at 23% 50%,rgba(229,201,158,.08),transparent 40%),rgba(5,5,4,.68)}
 .site-shell>.developers-section{background:radial-gradient(ellipse at 90% 50%,rgba(229,201,158,.07),transparent 45%),rgba(5,5,4,.62)}
 .site-shell>.final-cta,.site-shell>.site-footer{background:rgba(5,5,4,.82)}
+
+/* Fernhollow-inspired circular entry and persistent ambient controls. */
+.hero-actions .go{display:grid;place-items:center;width:58px;height:58px;flex:0 0 58px;border:1.5px solid #f5efe2;border-radius:50%;color:#f5efe2;background:transparent;transition:background .3s,color .3s,transform .3s}
+.hero-actions .go:hover{background:#f5efe2;color:#151510;transform:translateY(-2px)}
+.hero-actions .go svg{width:22px;height:22px;stroke-width:1.6}
+.site-shell>.cave-corner-controls,.ws-root>.cave-corner-controls{position:fixed;left:auto;right:44px;bottom:34px;z-index:30}
+.cave-corner-controls{display:flex;align-items:center;gap:18px;color:#f5efe2;font:500 11px/1 'Manrope',Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;pointer-events:auto;text-shadow:0 1px 14px rgba(0,0,0,.45)}
+.cave-corner-controls i{width:1px;height:26px;background:rgba(245,239,226,.48)}
+.cave-corner-controls button{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;background:transparent;color:inherit;cursor:pointer;transition:opacity .2s,transform .2s}
+.cave-corner-controls button:hover{opacity:.68;transform:scale(1.06)}
+.cave-corner-controls button:focus-visible{outline:2px solid #f5efe2;outline-offset:4px}
+.cave-corner-controls button:disabled{opacity:.4;cursor:not-allowed}
+@media(max-width:820px){
+ .site-shell>.cave-corner-controls,.ws-root>.cave-corner-controls{left:50%;right:auto;bottom:26px;transform:translateX(-50%)}
+ .cave-corner-controls{gap:15px;font-size:10px;white-space:nowrap}
+}
