@@ -491,3 +491,9 @@ html,body{background:#080706;color:#f5efe2}
  .site-shell>.cave-corner-controls,.ws-root>.cave-corner-controls{left:50%;right:auto;bottom:26px;transform:translateX(-50%)}
  .cave-corner-controls{gap:15px;font-size:10px;white-space:nowrap}
 }
+
+.fern-scene-loader{position:absolute;inset:0;z-index:6;display:grid;place-items:center;background:#050504;opacity:1;transition:opacity 1s ease;pointer-events:none}
+.fern-scene-loader.gone{opacity:0}
+.fern-scene-loader span{width:9px;height:9px;min-width:6px;min-height:6px;border-radius:50%;background:#f5efe2;animation:fern-loader-pulse 1.2s ease-in-out infinite}
+@keyframes fern-loader-pulse{50%{transform:scale(.4);opacity:.4}}
+@media(prefers-reduced-motion:reduce){.fern-scene-loader span{animation:none}.fern-scene-loader{transition:none}}
