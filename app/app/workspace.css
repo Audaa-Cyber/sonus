@@ -125,3 +125,28 @@
 .ws-topbar{background:rgba(8,7,6,.7)!important;backdrop-filter:blur(20px)}
 .ws-balance-panel,.ws-assistant-panel,.ws-actions-panel,.ws-market-panel,.ws-activity-panel,.ws-contacts-panel,.ws-history-card,.ws-settings-panel,.ws-placeholder-page,.ws-portfolio-balance,.ws-portfolio-wallet,.ws-portfolio-market,.ws-intelligence-check{background:rgba(13,12,10,.78)!important;backdrop-filter:blur(18px)}
 @media(max-width:700px){.ws-root{overflow-x:hidden}.ws-root>.fern-cave-scene{position:fixed}.ws-sidebar{backdrop-filter:blur(24px)}}
+
+/* Finish the warm dark theme for secondary states and nested workspace surfaces. */
+.ws-notice{background:rgba(229,201,158,.1);border-color:rgba(229,201,158,.2);color:#f5efe2}
+.ws-search-pop{background:rgba(13,12,10,.96);border-color:rgba(245,239,226,.16);color:#f5efe2;backdrop-filter:blur(20px)}
+.ws-search-pop input,.ws-search-pop button{color:#f5efe2}
+.ws-balance-change{background:rgba(168,215,196,.12);color:#a8d7c4}
+.ws-chain-balance button{background:rgba(245,239,226,.06);color:#f5efe2}
+.ws-coin{background:rgba(245,239,226,.09);color:#f5efe2}
+.ws-assistant-beta,.ws-history-status{background:rgba(245,239,226,.08);color:#d1c4ae}
+.ws-message-avatar,.ws-placeholder-icon{background:rgba(229,201,158,.13);color:#e5c99e}
+.ws-payment-result,.ws-history-empty{background:rgba(13,12,10,.82);border-color:rgba(245,239,226,.13);color:#f5efe2}
+.ws-safety-note,.ws-settings-disclaimer,.ws-portfolio-disclaimer{background:rgba(229,201,158,.1);border-color:rgba(229,201,158,.18);color:#e8d8bb}
+.ws-history-summary>div,.ws-history-note textarea{background:rgba(13,12,10,.82);border-color:rgba(245,239,226,.14);color:#f5efe2}
+.ws-history-status.confirmed{background:rgba(168,215,196,.12);color:#a8d7c4}
+.ws-history-status.failed{background:rgba(224,130,115,.12);color:#e08273}
+.ws-history-status.pending,.ws-history-status.submitted{background:rgba(229,201,158,.12);color:#e5c99e}
+.ws-settings-storage,.ws-settings-usage{background:rgba(245,239,226,.07);color:#d1c4ae}
+.ws-settings-storage.error,.ws-portfolio-error{background:rgba(224,130,115,.12);color:#e9a49a}
+.ws-portfolio-error,.ws-portfolio-disclaimer{border-color:rgba(245,239,226,.14)}
+.ws-intelligence-sender,.ws-risk-result{background:rgba(245,239,226,.06);border-color:rgba(245,239,226,.13);color:#f5efe2}
+.ws-risk-result.blocked{background:rgba(224,130,115,.1)}
+.ws-icon-btn,.ws-chain-balance button,.ws-history-refresh{color:#f5efe2;border-color:rgba(245,239,226,.14)}
+.ws-settings-input input,.ws-contact-form input,.ws-history-note textarea{color:#f5efe2}
+.ws-settings-input,.ws-contact-form input,.ws-history-search,.ws-history-filter select{border-color:rgba(245,239,226,.16);color:#f5efe2}
+.ws-root input::placeholder,.ws-root textarea::placeholder{color:rgba(245,239,226,.42)}
