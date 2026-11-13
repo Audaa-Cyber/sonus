@@ -268,5 +268,5 @@ export default function FernCaveScene() {
     };
   },[]);
 
-  return <div ref={hostRef} className="fern-cave-scene" aria-hidden="true"><div className={`fern-scene-loader${loaded?" gone":""}`}><span /></div></div>;
+  return <><div ref={hostRef} className="fern-cave-scene" aria-hidden="true" /><div className={`fern-scene-loader${loaded?" gone":""}`} aria-hidden="true"><span /></div></>;
 }
