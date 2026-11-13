@@ -53,18 +53,18 @@ export default function Home() {
       </header>
 
       <section className="hero-section" aria-labelledby="hero-title">
-        <DarkGradientBg className="hero-background" />
+        <div className="hero-background" aria-hidden="true" />
         <div className="hero-content">
           <p className="eyebrow"><span className="eyebrow-dot" /> SONUS · PAYMENT INTELLIGENCE</p>
-          <h1 id="hero-title">Money should<br />understand <em>you.</em></h1>
-          <p className="hero-description">Send crypto with a simple conversation. Sonus understands who you’re paying, why you’re paying, and what needs to happen before money moves.</p>
+          <h1 id="hero-title">Payments that<br /><em>understand you.</em></h1>
+          <p className="hero-description">Speak naturally. Sonus brings recipient identity, payment context, and transaction details together before you authorize a payment.</p>
           <div className="hero-actions">
             <a className="primary-link" href="/app">Try Sonus <ArrowRight size={16} /></a>
             <a className="secondary-link" href="#product">Explore the platform <ArrowDownRight size={15} /></a>
           </div>
           <p className="trust-note"><span /> Built for clarity. Designed for control.</p>
         </div>
-        <div className="hero-index"><span>SONUS / 001</span><span>INTENT → UNDERSTANDING → ACTION</span></div>
+        <div className="hero-index"><span>SONUS / 001</span><span>SPEAK → UNDERSTAND → AUTHORIZE</span></div>
       </section>
 
       <section className="product-section section-wrap" id="product" aria-labelledby="product-title">
