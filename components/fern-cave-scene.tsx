@@ -143,7 +143,9 @@ export default function FernCaveScene() {
 
     let pointerX=0,pointerY=0,targetX=0,targetY=0,wheelDistance=0,hover=0,hoverEase=0,frame=0,last=0,touchY=0;
     const onPointer=(e:PointerEvent)=>{targetX=(e.clientX/innerWidth-.5)*2;targetY=(e.clientY/innerHeight-.5)*2;};
-    const onScroll=()=>{scrollProgress=Math.min(1,Math.max(0,window.scrollY/Math.max(1,document.documentElement.scrollHeight-innerHeight)));};
+    const onWheel=(e:WheelEvent)=>{wheelDistance=Math.min(58,Math.max(-4,wheelDistance+e.deltaY*.012));};
+    const onTouchStart=(e:TouchEvent)=>{touchY=e.touches[0]?.clientY??0;};
+    const onTouchMove=(e:TouchEvent)=>{const y=e.touches[0]?.clientY??touchY;wheelDistance=Math.min(58,Math.max(-4,wheelDistance+(touchY-y)*.11));touchY=y;};
     const onEnter=()=>{hover=1;}; const onLeave=()=>{hover=0;};
     window.addEventListener("pointermove",onPointer,{passive:true});
     window.addEventListener("wheel",onWheel,{passive:true});\n    window.addEventListener("touchstart",onTouchStart,{passive:true});\n    window.addEventListener("touchmove",onTouchMove,{passive:true});
@@ -157,7 +159,7 @@ export default function FernCaveScene() {
       const dt=Math.min(.05,(time-last)/1000||.016);last=time;
       pointerX+=(targetX-pointerX)*.035;pointerY+=(targetY-pointerY)*.035;
       const auto= reduced?0:time*.00045;
-      const travel=scrollProgress*58+auto;
+      const travel=wheelDistance+auto;
       camera.position.z=5.5-travel;
       camera.position.x=pointerX*.48;
       camera.position.y=.15-pointerY*.28;
