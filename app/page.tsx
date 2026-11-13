@@ -11,6 +11,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import FernCaveScene from "@/components/fern-cave-scene";
+import CaveCornerControls from "@/components/cave-corner-controls";
 
 const steps = [
   { number: "01", title: "Describe it", detail: "Say what you need in plain language." },
@@ -28,6 +29,7 @@ export default function Home() {
   return (
     <main className="site-shell" id="top">
       <FernCaveScene />
+      <CaveCornerControls />
       <header className="site-header">
         <a className="brand-lockup" href="#top" aria-label="Sonus home">
           <span className="sonus-symbol" aria-hidden="true"><i /><i /><i /></span>
@@ -59,7 +61,7 @@ export default function Home() {
           <h1 id="hero-title">Payments that<br /><em>understand you.</em></h1>
           <p className="hero-description">Speak naturally. Sonus brings recipient identity, payment context, and transaction details together before you authorize a payment.</p>
           <div className="hero-actions">
-            <a className="primary-link" href="/app">Try Sonus <ArrowRight size={16} /></a>
+            <a className="go" href="/app" id="go" aria-label="Open the Sonus workspace"><ArrowRight size={22} /></a>
             <a className="secondary-link" href="#product">Explore the platform <ArrowDownRight size={15} /></a>
           </div>
           <p className="trust-note"><span /> Built for clarity. Designed for control.</p>
