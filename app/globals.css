@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400&family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap');
 
 :root {
   color-scheme: dark;
@@ -378,7 +378,6 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 
 /* Fernhollow direction: cinematic cave, warm cream, restrained botanical light. */
 :root{--ink:#080706;--ink-raised:#100e0b;--surface:rgba(13,12,10,.78);--white:#f5efe2;--muted:#b4aa99;--muted-light:#ddd2bf;--cyan:#d9b887;--line:rgba(245,239,226,.15);--line-strong:rgba(245,239,226,.28);--font-display:'Antonio','Arial Narrow',sans-serif;--font-body:'Manrope',Arial,sans-serif;--gutter:clamp(22px,4vw,64px)}
-@import url('https://fonts.googleapis.com/css2?family=Antonio:wght@400&family=Manrope:wght@400;500;600;700&display=swap');
 html,body{background:#080706;color:#f5efe2}
 .site-shell{background:#080706}
 .site-header{position:absolute;top:0;left:0;right:0;min-height:88px;padding:0 var(--gutter);border:0;background:linear-gradient(180deg,rgba(0,0,0,.55),transparent);backdrop-filter:none}
