@@ -186,7 +186,7 @@ export default function FernCaveScene() {
     window.addEventListener("wheel",onWheel,{passive:true});
     window.addEventListener("touchstart",onTouchStart,{passive:true});
     window.addEventListener("touchmove",onTouchMove,{passive:true});
-    const ctas=Array.from(document.querySelectorAll(".hero-actions .primary-link,.ws-send-payment-btn,.ws-connect-btn"));
+    const ctas=Array.from(document.querySelectorAll(".hero-actions .go,.hero-actions .primary-link,.ws-send-payment-btn,.ws-connect-btn"));
     ctas.forEach((cta)=>{cta.addEventListener("pointerenter",onEnter);cta.addEventListener("pointerleave",onLeave);});
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);composer.setSize(w,h);};
     const observer=new ResizeObserver(resize);observer.observe(host);resize();
