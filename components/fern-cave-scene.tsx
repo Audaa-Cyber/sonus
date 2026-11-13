@@ -100,8 +100,10 @@ export default function FernCaveScene() {
     stalactites.castShadow=!mobile;scene.add(stalactites);
 
     // A photograph-backed distant opening keeps the supplied reference image in the scene.
+    let disposed=false;
     const loader=new THREE.TextureLoader();
     loader.load("/fern-cave.webp",(texture)=>{
+      if(disposed){texture.dispose();return;}
       texture.colorSpace=THREE.SRGBColorSpace;
       const plate=new THREE.Mesh(new THREE.PlaneGeometry(160,90),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide}));
       plate.position.set(0,4,-102); scene.add(plate);
@@ -254,6 +256,7 @@ export default function FernCaveScene() {
     };
     if(!reduced)frame=requestAnimationFrame(animate);else composer.render();
     return ()=>{
+      disposed=true;
       cancelAnimationFrame(frame);observer.disconnect();
       window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);
       window.removeEventListener("touchstart",onTouchStart);
