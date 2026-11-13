@@ -87,7 +87,7 @@
 
 
 /* Sonus workspace: the cave becomes the shared environment, not a landing-only skin. */
-.ws-root{--ws-bg:#090806;--ws-surface:rgba(17,15,12,.82);--ws-ink:#f5efe2;--ws-muted:#b5aa98;--ws-line:rgba(245,239,226,.15);--ws-blue:#d9b887;min-height:100vh;background:#090806 url('/fern-cave.jpg') center center/cover fixed;color:#f5efe2;font-family:'Manrope',Arial,sans-serif}
+.ws-root{--ws-bg:#090806;--ws-surface:rgba(17,15,12,.82);--ws-ink:#f5efe2;--ws-muted:#b5aa98;--ws-line:rgba(245,239,226,.15);--ws-blue:#d9b887;min-height:100vh;background:#090806 url('/fern-cave.webp') center center/cover fixed;color:#f5efe2;font-family:'Manrope',Arial,sans-serif}
 .ws-root:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:linear-gradient(90deg,rgba(0,0,0,.78),rgba(0,0,0,.56)),linear-gradient(0deg,rgba(0,0,0,.72),rgba(0,0,0,.28))}
 .ws-root>*{position:relative;z-index:1}
 .ws-sidebar{background:rgba(8,7,6,.84);border-color:var(--ws-line);backdrop-filter:blur(22px)}
