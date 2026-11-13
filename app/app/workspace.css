@@ -84,3 +84,33 @@
 @keyframes ws-voice-pulse{0%,100%{box-shadow:0 0 0 2px rgba(181,71,71,.12)}50%{box-shadow:0 0 0 6px rgba(181,71,71,.04)}}
 @media(max-width:700px){.ws-composer{gap:7px;padding:10px}.ws-composer input{font-size:16px;min-width:0}.ws-composer-hint{display:none}.ws-assistant-foot{gap:5px;flex-wrap:wrap;line-height:1.5}}
 @media(prefers-reduced-motion:reduce){.ws-composer .ws-mic-btn.listening{animation:none}}
+
+
+/* Sonus workspace: the cave becomes the shared environment, not a landing-only skin. */
+.ws-root{--ws-bg:#090806;--ws-surface:rgba(17,15,12,.82);--ws-ink:#f5efe2;--ws-muted:#b5aa98;--ws-line:rgba(245,239,226,.15);--ws-blue:#d9b887;min-height:100vh;background:#090806 url('/fern-cave.jpg') center center/cover fixed;color:#f5efe2;font-family:'Manrope',Arial,sans-serif}
+.ws-root:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:linear-gradient(90deg,rgba(0,0,0,.78),rgba(0,0,0,.56)),linear-gradient(0deg,rgba(0,0,0,.72),rgba(0,0,0,.28))}
+.ws-root>*{position:relative;z-index:1}
+.ws-sidebar{background:rgba(8,7,6,.84);border-color:var(--ws-line);backdrop-filter:blur(22px)}
+.ws-brand,.ws-page-heading h1,.ws-history-heading h2,.ws-settings-heading h2,.ws-placeholder-page h2{color:#f5efe2;font-family:'Antonio','Arial Narrow',sans-serif;font-weight:400;letter-spacing:0}
+.ws-brand-mark i{background:#e5c99e}
+.ws-nav-item{color:#c5bba9}.ws-nav-item:hover,.ws-nav-item.active{background:rgba(245,239,226,.1);color:#f5efe2;border-color:rgba(245,239,226,.18)}
+.ws-nav-item.active svg,.ws-period,.ws-brand-period{color:#e5c99e}
+.ws-topbar{background:rgba(8,7,6,.72);border-color:var(--ws-line);backdrop-filter:blur(18px)}
+.ws-breadcrumb,.ws-breadcrumb strong{color:#f5efe2}
+.ws-connect-btn,.ws-send-payment-btn,.ws-composer .ws-send-btn{background:#f5efe2;border-color:#f5efe2;color:#151510}
+.ws-content,.ws-history-page,.ws-settings-page,.ws-placeholder-page,.ws-portfolio-page,.ws-intelligence-page{color:#f5efe2}
+.ws-page-heading p,.ws-history-heading p,.ws-settings-heading p,.ws-placeholder-page p{color:#c5bba9}
+.ws-balance-panel,.ws-assistant-panel,.ws-actions-panel,.ws-market-panel,.ws-activity-panel,.ws-contacts-panel,.ws-history-card,.ws-settings-panel,.ws-placeholder-page,.ws-portfolio-balance,.ws-portfolio-wallet,.ws-portfolio-market,.ws-intelligence-check{background:rgba(13,12,10,.78);border-color:var(--ws-line);backdrop-filter:blur(18px);border-radius:12px}
+.ws-panel-top,.ws-section-heading p,.ws-activity-info small,.ws-asset-name small,.ws-data-disclaimer,.ws-history-disclaimer{color:#b5aa98}
+.ws-balance-number,.ws-section-heading h2,.ws-activity-info strong,.ws-asset-name strong,.ws-market-row>strong{color:#f5efe2}
+.ws-action-grid button,.ws-composer input,.ws-history-search,.ws-history-filter select,.ws-settings-input,.ws-contact-form input,.ws-intelligence-check form input{background:rgba(245,239,226,.06);border-color:var(--ws-line);color:#f5efe2}
+.ws-action-grid button:hover,.ws-icon-btn:hover{background:rgba(245,239,226,.1);border-color:rgba(245,239,226,.3)}
+.ws-action-icon,.ws-assistant-symbol,.ws-contact-avatar,.ws-avatar{background:rgba(229,201,158,.13);color:#e5c99e}
+.ws-message>div:last-child{background:rgba(245,239,226,.09);color:#f5efe2}
+.ws-message.user>div:last-child{background:rgba(229,201,158,.2);color:#fff4df}
+.ws-prompt-chips button,.ws-composer button,.ws-intent-buttons button,.ws-chain-balance button,.ws-history-refresh,.ws-contact-import-row button{background:rgba(245,239,226,.06);border-color:var(--ws-line);color:#f5efe2}
+.ws-intent-card{background:rgba(229,201,158,.09);border-color:rgba(229,201,158,.25)}
+.ws-notice{background:rgba(229,201,158,.1);border-color:rgba(229,201,158,.24);color:#f5efe2}
+.ws-footer{border-color:var(--ws-line);color:#b5aa98}
+.ws-root button:focus-visible,.ws-root input:focus-visible,.ws-root textarea:focus-visible,.ws-root select:focus-visible{outline-color:#e5c99e}
+@media(max-width:700px){.ws-sidebar{background:rgba(8,7,6,.94)}.ws-topbar{background:rgba(8,7,6,.9)}}
