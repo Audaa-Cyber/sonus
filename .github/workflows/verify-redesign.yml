@@ -1,0 +1,22 @@
+name: Verify Sonus redesign
+
+on:
+  push:
+    branches:
+      - redesign/fern-flower-experience
+  pull_request:
+    branches:
+      - redesign/fern-flower-experience
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
