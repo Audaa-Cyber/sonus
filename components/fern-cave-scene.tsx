@@ -264,7 +264,10 @@ export default function FernCaveScene() {
       petalMat.emissiveIntensity=.48+cursorGlow*.9;centerMat.emissiveIntensity=1.5+cursorGlow*2;
       if(!reduced){dust.rotation.y=Math.sin(time*.00012)*.04;dust.position.y=Math.sin(time*.0003)*.08;}
       composer.render();
+      // Reveal the environment after its first frame; the reference texture may arrive later.
+      if(!sceneRevealed){sceneRevealed=true;setLoaded(true);}
     };
+    let sceneRevealed=false;
     // Keep the render loop alive even with reduced motion so the scene still renders,
     // responds to explicit navigation input, and resizes correctly. Only ambient motion is reduced.
     if(!document.hidden) frame=requestAnimationFrame(animate);
