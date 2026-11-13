@@ -78,7 +78,7 @@ export default function FernCaveScene() {
 
     // A photograph-backed distant opening keeps the supplied reference image in the scene.
     const loader=new THREE.TextureLoader();
-    loader.load("/fern-cave.jpg",(texture)=>{
+    loader.load("/fern-cave.webp",(texture)=>{
       texture.colorSpace=THREE.SRGBColorSpace;
       const plate=new THREE.Mesh(new THREE.PlaneGeometry(27,15.1),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.8,depthWrite:false}));
       plate.position.set(0,3.8,-96); scene.add(plate);
