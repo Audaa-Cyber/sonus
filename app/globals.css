@@ -497,3 +497,5 @@ html,body{background:#080706;color:#f5efe2}
 .fern-scene-loader span{width:9px;height:9px;min-width:6px;min-height:6px;border-radius:50%;background:#f5efe2;animation:fern-loader-pulse 1.2s ease-in-out infinite}
 @keyframes fern-loader-pulse{50%{transform:scale(.4);opacity:.4}}
 @media(prefers-reduced-motion:reduce){.fern-scene-loader span{animation:none}.fern-scene-loader{transition:none}}
+
+.site-shell>.fern-scene-loader,.ws-root>.fern-scene-loader{position:fixed;inset:0;z-index:50}
