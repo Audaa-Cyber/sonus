@@ -499,3 +499,7 @@ html,body{background:#080706;color:#f5efe2}
 @media(prefers-reduced-motion:reduce){.fern-scene-loader span{animation:none}.fern-scene-loader{transition:none}}
 
 .site-shell>.fern-scene-loader,.ws-root>.fern-scene-loader{position:fixed;inset:0;z-index:50}
+
+@keyframes fern-ui-reveal{from{opacity:0}to{opacity:1}}
+.site-shell>*:not(.fern-cave-scene):not(.fern-scene-loader),.ws-root>*:not(.fern-cave-scene):not(.fern-scene-loader){animation:fern-ui-reveal 1.6s ease .2s both}
+@media(prefers-reduced-motion:reduce){.site-shell>*:not(.fern-cave-scene):not(.fern-scene-loader),.ws-root>*:not(.fern-cave-scene):not(.fern-scene-loader){animation:none}}
