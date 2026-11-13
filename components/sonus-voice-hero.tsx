@@ -48,6 +48,8 @@ function VoiceEqualizer() {
       const phrase = t % 4.1;
       const speaking = phrase < 2.35;
       const phraseStrength = speaking ? 0.58 + 0.42 * Math.sin(Math.PI * phrase / 2.35) : 0;
+      const micPulse = reduced ? 0 : phraseStrength * (0.28 + 0.72 * Math.pow(Math.max(0, Math.sin((Math.max(0, phrase) * 6.2) * Math.PI)), 1.6));
+      canvas.closest(".sonus-voice-page")?.style.setProperty("--voice-level", micPulse.toFixed(3));
       for (let x = 0; x < columns; x++) {
         const distance = Math.abs(x - center) / columns;
         const delay = distance * 0.32;
