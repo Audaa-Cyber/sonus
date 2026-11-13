@@ -56,7 +56,7 @@ export default function CaveCornerControls() {
 
   return (
     <div className="cave-corner-controls">
-      <span>Scroll to wander</span>
+      <span>Scroll to wander · ↑ ↓ to move</span>
       <i aria-hidden="true" />
       <button type="button" onClick={toggleSound} aria-label={enabled ? "Mute ambient sound" : "Enable ambient sound"} aria-pressed={enabled} disabled={!available} title={available ? "Ambient sound" : "Audio unavailable"}>
         {enabled ? <Volume2 size={19} strokeWidth={1.5} /> : <VolumeX size={19} strokeWidth={1.5} />}
