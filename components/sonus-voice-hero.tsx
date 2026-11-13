@@ -49,7 +49,10 @@ function VoiceEqualizer() {
       const speaking = phrase < 2.35;
       const phraseStrength = speaking ? 0.58 + 0.42 * Math.sin(Math.PI * phrase / 2.35) : 0;
       const micPulse = reduced ? 0 : phraseStrength * (0.28 + 0.72 * Math.pow(Math.max(0, Math.sin((Math.max(0, phrase) * 6.2) * Math.PI)), 1.6));
-      canvas.closest(".sonus-voice-page")?.style.setProperty("--voice-level", micPulse.toFixed(3));
+      const page = canvas.closest<HTMLElement>(".sonus-voice-page");
+      page?.style.setProperty("--voice-ring-size", `${3 + micPulse * 10}px`);
+      page?.style.setProperty("--voice-glow-alpha", (micPulse * 0.42).toFixed(3));
+      page?.style.setProperty("--voice-glow-blur", `${micPulse * 28}px`);
       for (let x = 0; x < columns; x++) {
         const distance = Math.abs(x - center) / columns;
         const delay = distance * 0.32;
