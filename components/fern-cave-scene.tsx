@@ -167,8 +167,8 @@ export default function FernCaveScene() {
       last=time;
       pointerX+=(targetX-pointerX)*.035;pointerY+=(targetY-pointerY)*.035;
       hoverEase+=(hover-hoverEase)*.045;
-      const auto=reduced?0:time*.00045*(1-hoverEase);
-      const travel=wheelDistance+auto;
+      const auto=reduced?0:Math.min(58,time*.00045)*(1-hoverEase);
+      const travel=Math.min(58,Math.max(-4,wheelDistance+auto));
       camera.position.z=5.5-travel;
       camera.position.x=pointerX*.48;
       camera.position.y=.15-pointerY*.28;
@@ -198,21 +198,32 @@ export default function FernCaveScene() {
         const distance=Math.sqrt(dx*dx+dy*dy+dz*dz);
         const repel=distance<2.5?(1-distance/2.5)*.75:0;
         const scale=f.scale*(.65+Math.min(1,Math.max(0,(12-distance)/10))*.5);
+        const flowerZ=worldZ+disperse*Math.sin(time*.001+f.phase)*.8;
         for(let k=0;k<5;k++){
           const a=k*Math.PI*2/5;
-          flowerDummy.position.set(worldX+Math.cos(a)*(.13*scale+repel*.35),worldY+Math.sin(a)*.13*scale+repel*.18,worldZ+disperse*Math.sin(time*.001+f.phase)*.8);
+          flowerDummy.position.set(worldX+Math.cos(a)*(.13*scale+repel*.35),worldY+Math.sin(a)*.13*scale+repel*.18,flowerZ);
           flowerDummy.rotation.set(0,-a+sway,disperse* Math.sin(time*.001+f.phase)*.8);
           flowerDummy.scale.setScalar(scale*(1+disperse*.6));flowerDummy.updateMatrix();petals.setMatrixAt(i*5+k,flowerDummy.matrix);
         }
         flowerDummy.position.set(worldX+repel*.2,worldY+repel*.1,worldZ);
         flowerDummy.scale.setScalar(scale*(1+disperse*.5));flowerDummy.updateMatrix();centers.setMatrixAt(i,flowerDummy.matrix);
       }
-      petals.instanceMatrix.needsUpdate=true;centers.instanceMatrix.needsUpdate=true;stems.instanceMatrix.needsUpdate=true;
+      // Keep stems and leaves attached as the blossoms sway and disperse.
+        flowerDummy.position.set(worldX,worldY-.22*scale,flowerZ);
+        flowerDummy.rotation.set(0,sway,disperse*Math.sin(time*.001+f.phase)*.35);
+        flowerDummy.scale.setScalar(scale*(1+disperse*.25));flowerDummy.updateMatrix();stems.setMatrixAt(i,flowerDummy.matrix);
+        for(let k=0;k<2;k++){
+          flowerDummy.position.set(worldX+f.side*(.18+k*.13),worldY-.12,flowerZ+.12-k*.18);
+          flowerDummy.rotation.set(.2,f.side*.5+k*.5+sway,.5*f.side+disperse*.3);
+          flowerDummy.scale.setScalar(scale);flowerDummy.updateMatrix();leaves.setMatrixAt(i*2+k,flowerDummy.matrix);
+        }
+      }
+      petals.instanceMatrix.needsUpdate=true;centers.instanceMatrix.needsUpdate=true;stems.instanceMatrix.needsUpdate=true;leaves.instanceMatrix.needsUpdate=true;
       petalMat.emissiveIntensity=.48+cursorGlow*.9;centerMat.emissiveIntensity=1.5+cursorGlow*2;
       if(!reduced){dust.rotation.y=Math.sin(time*.00012)*.04;dust.position.y=Math.sin(time*.0003)*.08;}
       renderer.render(scene,camera);
     };
-    if(!reduced)frame=requestAnimationFrame(animate);else renderer.render(scene,camera);
+    frame=requestAnimationFrame(animate);
     return ()=>{
       cancelAnimationFrame(frame);observer.disconnect();
       window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);
