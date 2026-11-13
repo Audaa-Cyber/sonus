@@ -1,6 +1,7 @@
  "use client";
 
 import "./workspace.css";
+import FernCaveScene from "@/components/fern-cave-scene";
 import { parseContactImport } from "@/lib/contact-import.mjs";
 import { normalizeSavedContacts } from "@/lib/contact-storage.mjs";
 import { normalizeTransactionHistory } from "@/lib/transaction-history.mjs";
@@ -1169,6 +1170,7 @@ export default function SonusWorkspace() {
 
   return (
     <main className="ws-root">
+      <FernCaveScene />
       <aside className="ws-sidebar">
         <Link href="/" className="ws-brand" aria-label="Sonus home">
           <span className="ws-brand-mark"><i /><i /><i /></span><span>SONUS<span className="ws-brand-period">.</span></span>
