@@ -114,3 +114,14 @@
 .ws-footer{border-color:var(--ws-line);color:#b5aa98}
 .ws-root button:focus-visible,.ws-root input:focus-visible,.ws-root textarea:focus-visible,.ws-root select:focus-visible{outline-color:#e5c99e}
 @media(max-width:700px){.ws-sidebar{background:rgba(8,7,6,.94)}.ws-topbar{background:rgba(8,7,6,.9)}}
+
+/* Shared 3D environment behind every Sonus workspace route. */
+.ws-root{position:relative;isolation:isolate;overflow:hidden;background:#090705}
+.ws-root>.fern-cave-scene{position:fixed;inset:0;z-index:0;pointer-events:none}
+.ws-root>.ws-sidebar,.ws-root>.ws-main{position:relative;z-index:2}
+.ws-root:before{z-index:1}
+.ws-sidebar{background:rgba(8,7,6,.82)!important;backdrop-filter:blur(22px)}
+.ws-main{background:transparent!important;min-width:0}
+.ws-topbar{background:rgba(8,7,6,.7)!important;backdrop-filter:blur(20px)}
+.ws-balance-panel,.ws-assistant-panel,.ws-actions-panel,.ws-market-panel,.ws-activity-panel,.ws-contacts-panel,.ws-history-card,.ws-settings-panel,.ws-placeholder-page,.ws-portfolio-balance,.ws-portfolio-wallet,.ws-portfolio-market,.ws-intelligence-check{background:rgba(13,12,10,.78)!important;backdrop-filter:blur(18px)}
+@media(max-width:700px){.ws-root{overflow-x:hidden}.ws-root>.fern-cave-scene{position:fixed}.ws-sidebar{backdrop-filter:blur(24px)}}
