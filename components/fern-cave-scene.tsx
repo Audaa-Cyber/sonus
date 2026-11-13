@@ -42,7 +42,7 @@ export default function FernCaveScene() {
     const rockMat = new THREE.MeshStandardMaterial({ color:0x30251e, roughness:.96, metalness:0 });
     const rockDark = new THREE.MeshStandardMaterial({ color:0x17120f, roughness:1 });
     const rockGeo = new THREE.BufferGeometry();
-    const verts:number[] = [], indices:number[] = [], normals:number[] = [];
+    const verts:number[] = [], indices:number[] = [];
     const rings=38, around=36, length=100;
     for(let j=0;j<=rings;j++){
       const z=8-(j/rings)*length;
@@ -149,14 +149,14 @@ export default function FernCaveScene() {
     const onEnter=()=>{hover=1;}; const onLeave=()=>{hover=0;};
     window.addEventListener("pointermove",onPointer,{passive:true});
     window.addEventListener("wheel",onWheel,{passive:true});\n    window.addEventListener("touchstart",onTouchStart,{passive:true});\n    window.addEventListener("touchmove",onTouchMove,{passive:true});
-    const cta=document.querySelector(".hero-actions .primary-link");
-    cta?.addEventListener("pointerenter",onEnter); cta?.addEventListener("pointerleave",onLeave);
+    const ctas=Array.from(document.querySelectorAll(".hero-actions .primary-link,.ws-send-payment-btn,.ws-connect-btn"));
+    ctas.forEach((cta)=>{cta.addEventListener("pointerenter",onEnter);cta.addEventListener("pointerleave",onLeave);});
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix();renderer.setSize(w,h,false);};
     const observer=new ResizeObserver(resize);observer.observe(host);resize();
 
     const animate=(time:number)=>{
       frame=requestAnimationFrame(animate);
-      const dt=Math.min(.05,(time-last)/1000||.016);last=time;
+      last=time;
       pointerX+=(targetX-pointerX)*.035;pointerY+=(targetY-pointerY)*.035;
       hoverEase+=(hover-hoverEase)*.045;
       const auto=reduced?0:time*.00045*(1-hoverEase);
@@ -196,7 +196,7 @@ export default function FernCaveScene() {
     return ()=>{
       cancelAnimationFrame(frame);observer.disconnect();
       window.removeEventListener("pointermove",onPointer);window.removeEventListener("wheel",onWheel);\n      window.removeEventListener("touchstart",onTouchStart);\n      window.removeEventListener("touchmove",onTouchMove);
-      cta?.removeEventListener("pointerenter",onEnter);cta?.removeEventListener("pointerleave",onLeave);
+      ctas.forEach((cta)=>{cta.removeEventListener("pointerenter",onEnter);cta.removeEventListener("pointerleave",onLeave);});
       scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.Points){o.geometry.dispose();const m=o.material;if(Array.isArray(m))m.forEach(x=>x.dispose());else m.dispose();}});
       renderer.dispose();renderer.domElement.remove();
     };
