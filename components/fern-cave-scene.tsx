@@ -108,7 +108,7 @@ export default function FernCaveScene() {
       texture.colorSpace=THREE.SRGBColorSpace;
       const plate=new THREE.Mesh(new THREE.PlaneGeometry(160,90),new THREE.MeshBasicMaterial({map:texture,transparent:true,opacity:.92,depthWrite:false,side:THREE.DoubleSide}));
       plate.position.set(0,4,-102); scene.add(plate);setLoaded(true);
-    },undefined,()=>{host.style.backgroundImage="url('/fern-cave.webp')";host.style.backgroundSize="cover";host.style.backgroundPosition="center";setLoaded(true);});
+    },undefined,()=>{if(disposed)return;host.style.backgroundImage="url('/fern-cave.webp')";host.style.backgroundSize="cover";host.style.backgroundPosition="center";setLoaded(true);});
 
     // Hundreds of instanced blossoms. Petals and centers sway and react to cursor proximity.
     const flowerCount=mobile?210:560;
