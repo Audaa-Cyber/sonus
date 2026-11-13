@@ -45,6 +45,11 @@ export default function FernCaveScene() {
     fill.position.set(-5, 1.4, -16); scene.add(fill);
     const rim = new THREE.PointLight(0xf2b76f, 65, 35, 2);
     rim.position.set(5, 3.2, -48); scene.add(rim);
+    const keyLight=new THREE.DirectionalLight(0xffd9aa,mobile?1.2:2.1);
+    keyLight.position.set(-2,8,-24);keyLight.castShadow=!mobile;
+    keyLight.shadow.mapSize.set(1024,1024);keyLight.shadow.camera.near=.5;keyLight.shadow.camera.far=38;
+    keyLight.shadow.camera.left=-12;keyLight.shadow.camera.right=12;keyLight.shadow.camera.top=12;keyLight.shadow.camera.bottom=-8;
+    scene.add(keyLight);
 
     // A curved, segmented rock tunnel: a real navigable environment, not a flat image.
     const rockMat = new THREE.MeshStandardMaterial({ color:0x30251e, roughness:.96, metalness:0, side:THREE.DoubleSide });
@@ -75,6 +80,7 @@ export default function FernCaveScene() {
     // Stalagmites and broken rock silhouettes along both sides.
     const rockGeoSmall=new THREE.DodecahedronGeometry(1,1);
     const rockInstances=new THREE.InstancedMesh(rockGeoSmall,rockDark,mobile?95:180);
+    rockInstances.castShadow=!mobile;rockInstances.receiveShadow=true;
     const dummy=new THREE.Object3D();
     for(let i=0;i<(mobile?95:180);i++){
       const side=i%2?1:-1, z=7-Math.random()*94, x=side*(5.4+Math.random()*2.8);
@@ -152,6 +158,12 @@ export default function FernCaveScene() {
       stone.rotation.y=Math.random()*Math.PI; stone.receiveShadow=true; stones.add(stone);
     }
     scene.add(stones);
+    const lightBeams=new THREE.Group();
+    for(let i=0;i<3;i++){
+      const beam=new THREE.Mesh(new THREE.CylinderGeometry(0,2.4+i*.55,14,20,1,true),new THREE.MeshBasicMaterial({color:0xffd69c,transparent:true,opacity:.055-i*.009,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+      beam.position.set((i-1)*2.1,3.4,-27-i*7);beam.rotation.z=(i-1)*-.07;lightBeams.add(beam);
+    }
+    scene.add(lightBeams);
 
     let pointerX=0,pointerY=0,targetX=0,targetY=0,wheelDistance=0,hover=0,hoverEase=0,frame=0,last=0,touchY=0;
     const onPointer=(e:PointerEvent)=>{targetX=(e.clientX/innerWidth-.5)*2;targetY=(e.clientY/innerHeight-.5)*2;};
@@ -182,6 +194,7 @@ export default function FernCaveScene() {
       camera.rotation.x=pointerY*.035;
       camera.rotation.z=-pointerX*.012;
       warm.intensity=145+Math.sin(time*.0007)*12;
+      lightBeams.children.forEach((beam,i)=>{beam.rotation.y=Math.sin(time*.00022+i)*.035;const material=beam.material as THREE.MeshBasicMaterial;material.opacity=.045+Math.sin(time*.0005+i)*.012;});
       fill.intensity=35+Math.sin(time*.0009+1)*8;
       const disperse=hoverEase;
       let cursorGlow=0;
