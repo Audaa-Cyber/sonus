@@ -197,9 +197,9 @@ export default function FernCaveScene() {
       const auto=reduced?0:Math.min(58,time*.00045)*(1-hoverEase);
       const travel=Math.min(58,Math.max(-4,wheelDistance+auto));
       camera.position.z=5.5-travel;
-      camera.position.x=pointerX*.48;
-      camera.position.y=.15-pointerY*.28;
-      camera.rotation.y=-pointerX*.055;
+      camera.position.x=Math.sin(travel*.045)*1.2+pointerX*.48;
+      camera.position.y=.15+Math.sin(travel*.08)*.12-pointerY*.28;
+      camera.rotation.y=Math.cos(travel*.045)*.025-pointerX*.055;
       camera.rotation.x=pointerY*.035;
       camera.rotation.z=-pointerX*.012;
       warm.intensity=145+Math.sin(time*.0007)*12;
